@@ -1,0 +1,224 @@
+// firestore.rules
+//
+// Production-ready Firestore security rules for Vibely.
+// Deploy with: firebase deploy --only firestore:rules
+//
+// Design principles:
+//  • Authenticated users can read/write only their own sensitive data.
+//  • Public profile fields are readable by all authenticated users.
+//  • Posts respect the post's own privacy field.
+//  • Messages are only readable by participants of that conversation.
+//  • No unauthenticated access to any document.
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+    function isAuth()          { return request.auth != null; }
+    function isOwner(uid)      { return isAuth() && request.auth.uid == uid; }
+    function isMine(docOwner)  { return isAuth() && request.auth.uid == docOwner; }
+
+    // ── Users ──────────────────────────────────────────────────────────────
+    match /Users/{uid} {
+      // Any logged-in user can read public profile fields.
+      allow read: if isAuth();
+
+      // Only the account owner can create or fully update their document.
+      allow create: if isOwner(uid);
+
+      // Updates: owner only, and cannot escalate isVerified to true themselves.
+      allow update: if isOwner(uid)
+                    && (!request.resource.data.diff(resource.data).affectedKeys()
+                           .hasAny(['isVerified']));
+
+      // Deletion not permitted through client SDK — use Cloud Functions.
+      allow delete: if false;
+
+      // ── Notifications sub-collection ─────────────────────────────────────
+      // CORRECTION: this is the collection path the app actually reads and
+      // writes (see notification_service.dart / notification_repository.dart:
+      // `Users/{uid}/notifications/{notifId}`). A previous version of these
+      // rules protected a different, unused top-level path
+      // (`/Notifications/{uid}/UserNotifications`), which meant every real
+      // notification read/write fell through to the deny-all catch-all rule
+      // below — i.e. the notification feature could not work at all against
+      // these rules.
+      match /notifications/{notifId} {
+        // Only the recipient reads their own notifications.
+        allow read: if isOwner(uid);
+        // Any authenticated user can send a notification to another user
+        // (e.g. "X liked your post"), but it must honestly claim to be from
+        // the caller and be one of the known types — otherwise anyone could
+        // forge a notification appearing to be from an arbitrary other user.
+        allow create: if isAuth()
+                      && request.resource.data.fromUserId == request.auth.uid
+                      && request.resource.data.type in
+                         ['postLike', 'postComment', 'commentLike',
+                          'commentReply', 'message', 'follow', 'mention'];
+        // Only the recipient can mark as read / delete.
+        allow update: if isOwner(uid);
+        allow delete: if isOwner(uid);
+      }
+    }
+
+    // ── Posts ──────────────────────────────────────────────────────────────
+    match /Posts/{postId} {
+      // Read: public posts visible to all; followers-only posts need the
+      // reader to follow the author (checked via the author's Firestore doc).
+      allow read: if isAuth() && (
+            resource.data.privacy == 'public'
+         || isMine(resource.data.uid)
+         || (resource.data.privacy == 'followers'
+             && exists(/databases/$(database)/documents/Users/$(resource.data.uid))
+             && request.auth.uid in
+                get(/databases/$(database)/documents/Users/$(resource.data.uid)).data.followersUids)
+      );
+
+      // Create: authenticated, and uid field must match caller.
+      allow create: if isAuth() && request.resource.data.uid == request.auth.uid;
+
+      // Update/delete: post owner only. The `uid` field is locked so an
+      // owner can't reassign authorship of the post to someone else.
+      allow update: if isMine(resource.data.uid)
+                    && request.resource.data.uid == resource.data.uid;
+      allow delete: if isMine(resource.data.uid);
+
+      // ── Comments sub-collection ──────────────────────────────────────────
+      // CORRECTION: actual path is lowercase `comments` (see
+      // post_repository.dart), and the author field is `userId`, not `uid`
+      // (see PostsCubit.addComment). The previous version of this rule used
+      // `Comments`/`uid`, which never matched real writes and would have
+      // fallen through to the deny-all rule below.
+      match /comments/{commentId} {
+        allow read:   if isAuth();
+        allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+        allow update: if isAuth() && resource.data.userId == request.auth.uid
+                      && request.resource.data.userId == resource.data.userId;
+        allow delete: if isAuth() && resource.data.userId == request.auth.uid;
+
+        // ── Replies sub-collection ─────────────────────────────────────────
+        // Previously had no rule at all (see PostsCubit.addReply /
+        // post_repository.dart), so replies could never be read or written.
+        match /replies/{replyId} {
+          allow read:   if isAuth();
+          allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+          allow update: if isAuth() && resource.data.userId == request.auth.uid
+                        && request.resource.data.userId == resource.data.userId;
+          allow delete: if isAuth() && resource.data.userId == request.auth.uid;
+        }
+      }
+    }
+
+    // ── Chats (1-to-1) ────────────────────────────────────────────────────
+    // Chat document ID = sorted(uid1, uid2).join('_')
+    match /Chats/{chatId} {
+      function isParticipant() {
+        return isAuth() && (
+          resource.data.uid1 == request.auth.uid ||
+          resource.data.uid2 == request.auth.uid
+        );
+      }
+      function willBeParticipant() {
+        return isAuth() && (
+          request.resource.data.uid1 == request.auth.uid ||
+          request.resource.data.uid2 == request.auth.uid
+        );
+      }
+
+      allow read:   if isParticipant();
+      allow create: if willBeParticipant();
+      // Participants can update chat metadata (last message, typing, etc.)
+      // but cannot change who the two participants are.
+      allow update: if isParticipant()
+                    && request.resource.data.uid1 == resource.data.uid1
+                    && request.resource.data.uid2 == resource.data.uid2;
+      allow delete: if false;
+
+      // ── Messages sub-collection ──────────────────────────────────────────
+      match /Messages/{msgId} {
+        allow read:   if isParticipant();
+        allow create: if isParticipant()
+                      && request.resource.data.senderId == request.auth.uid;
+        allow update: if isParticipant();   // edit / reactions / pin / delete flag
+        allow delete: if false;             // soft-delete via isDeleted flag
+      }
+    }
+
+    // ── Group chats ────────────────────────────────────────────────────────
+    match /Groups/{groupId} {
+      function isMember() {
+        return isAuth() &&
+               request.auth.uid in resource.data.memberUids;
+      }
+      function willBeMember() {
+        return isAuth() &&
+               request.auth.uid in request.resource.data.memberUids;
+      }
+
+      allow read:   if isMember();
+      allow create: if willBeMember()
+                    && request.resource.data.adminUid == request.auth.uid;
+      // Any member can update general group fields (name, photo, settings),
+      // but only the current admin can change who the admin is or who the
+      // members are — otherwise any member could self-promote or hijack
+      // the group by rewriting these fields directly.
+      allow update: if isMember() && (
+            resource.data.adminUid == request.auth.uid
+         || !request.resource.data.diff(resource.data).affectedKeys()
+                .hasAny(['adminUid', 'memberUids'])
+      );
+      allow delete: if isAuth() && resource.data.adminUid == request.auth.uid;
+
+      match /Messages/{msgId} {
+        allow read:   if isMember();
+        // 'system' is used for auto-generated messages (e.g. "X left the
+        // group") — see ChatCubit.leaveGroup(). Without this, those writes
+        // always failed with permission-denied because the sender isn't a
+        // real auth.uid, which broke the "leave group" flow (the user was
+        // removed from the group but the UI never got to update).
+        allow create: if isMember()
+                      && (request.resource.data.senderId == request.auth.uid
+                          || request.resource.data.senderId == 'system');
+        allow update: if isMember();
+        allow delete: if false;
+      }
+    }
+
+    // ── Stories ────────────────────────────────────────────────────────────
+    match /Stories/{storyId} {
+      allow read:   if isAuth();
+      allow create: if isAuth() && request.resource.data.uid == request.auth.uid;
+      allow update: if isMine(resource.data.uid)
+                    && request.resource.data.uid == resource.data.uid;
+      allow delete: if isMine(resource.data.uid);
+
+      // ── Story comments sub-collection ───────────────────────────────────
+      // Previously uncovered (see StoriesCubit.addStoryComment), so story
+      // comments could never be read or written.
+      match /Comments/{commentId} {
+        allow read:   if isAuth();
+        allow create: if isAuth() && request.resource.data.uid == request.auth.uid;
+        allow delete: if isAuth() && resource.data.uid == request.auth.uid;
+        allow update: if false; // story comments aren't editable in-app
+      }
+    }
+
+    // ── Reports ────────────────────────────────────────────────────────────
+    // Previously uncovered (see report_sheet.dart / chat_repository.dart), so
+    // the "Report" button could never actually submit a report.
+    match /Reports/{reportId} {
+      // Reports are submit-only from the client; reporter identity is
+      // locked to the caller so reports can't be forged as coming from
+      // someone else. Reviewing reports happens via the admin console /
+      // Cloud Functions, not the client SDK, so no client read/update.
+      allow create: if isAuth() && request.resource.data.reportedBy == request.auth.uid;
+      allow read, update, delete: if false;
+    }
+
+    // ── Catch-all: deny everything else ───────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

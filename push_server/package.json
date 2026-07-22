@@ -1,0 +1,18 @@
+{
+  "name": "vibely-push-server",
+  "version": "1.0.0",
+  "description": "Standalone push-notification sender for Vibely — alternative to a Firebase Cloud Function, no Blaze plan required.",
+  "main": "index.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "cors": "^2.8.5",
+    "firebase-admin": "^13.6.0"
+  },
+  "private": true
+}

@@ -1,0 +1,21 @@
+// ─────────────────────────────────────────────────────────────────────────────
+//  lib/share/local/app_config.dart.example
+//
+//  This file IS safe to commit. It shows the structure without real credentials.
+//
+//  To use: copy this file to app_config.dart and fill in your values.
+//  But with --dart-define-from-file you don't need to touch app_config.dart at
+//  all — just create a .env file at the project root.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class AppConfig {
+  AppConfig._();
+
+  static const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  static const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+
+  static void validate() {
+    assert(supabaseUrl.isNotEmpty, 'SUPABASE_URL missing — see .env.example');
+    assert(supabaseAnonKey.isNotEmpty, 'SUPABASE_ANON_KEY missing — see .env.example');
+  }
+}
