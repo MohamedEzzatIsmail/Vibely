@@ -33,13 +33,6 @@
         { "fieldPath": "hashtags", "arrayConfig": "CONTAINS" },
         { "fieldPath": "dateTime", "order": "DESCENDING" }
       ]
-    },
-    {
-      "collectionGroup": "Messages",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "dateTime", "order": "ASCENDING" }
-      ]
     }
   ],
   "fieldOverrides": []

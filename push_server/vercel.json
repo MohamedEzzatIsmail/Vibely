@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/", "destination": "/api/index" },
+    { "source": "/send-notification", "destination": "/api/send-notification" }
+  ]
+}
