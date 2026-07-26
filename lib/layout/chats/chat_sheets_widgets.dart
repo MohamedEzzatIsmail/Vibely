@@ -10,17 +10,28 @@ class _NewChatSheetState extends State<_NewChatSheet> {
   List<UserModel> _results = [];
   bool _loading = false;
 
+  // BUG FIX: this used to be a Firestore range query
+  // (`name >= q && name <= q + '\uf8ff'`), which is case-sensitive because
+  // Firestore compares by raw Unicode code point. Typing "moh" would never
+  // match a stored name like "Mohamed" since uppercase letters sort before
+  // lowercase ones — the query silently returned nothing for almost any
+  // real-world capitalization. Fixed by fetching a bounded set of users once
+  // and filtering client-side, case-insensitively, as a substring match
+  // (not just a prefix match, which is friendlier too).
   Future<void> _search(String q) async {
-    if (q.trim().isEmpty) { setState(() => _results = []); return; }
+    final query = q.trim();
+    if (query.isEmpty) { setState(() => _results = []); return; }
     setState(() => _loading = true);
-    final snap = await FirebaseFirestore.instance.collection('Users')
-        .where('name', isGreaterThanOrEqualTo: q)
-        .where('name', isLessThanOrEqualTo: '$q\uf8ff')
-        .limit(20).get();
+    final snap =
+        await FirebaseFirestore.instance.collection('Users').limit(200).get();
     final myUid = widget.cubit.currentUser?.uid;
+    final lower = query.toLowerCase();
     setState(() {
-      _results = snap.docs.map((d) => UserModel.fromJson(d.data()))
-          .where((u) => u.uid != myUid).toList();
+      _results = snap.docs
+          .map((d) => UserModel.fromJson(d.data()))
+          .where((u) =>
+              u.uid != myUid && (u.name ?? '').toLowerCase().contains(lower))
+          .toList();
       _loading = false;
     });
   }

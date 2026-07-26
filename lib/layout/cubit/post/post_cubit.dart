@@ -31,6 +31,11 @@ class PostsCubit extends Cubit<PostsStates> {
 
   // ── Feed stream subscription (cancelled on logout) ────────────────────────
   StreamSubscription? _feedSub;
+  // If the listener errors out (transient network/auth hiccup), this retries
+  // the subscription automatically instead of leaving the feed stuck until
+  // the user manually pulls to refresh.
+  Timer? _feedRetryTimer;
+  static const _feedRetryDelay = Duration(seconds: 3);
 
   // ── Pagination ─────────────────────────────────────────────────────────────
   DocumentSnapshot? _lastDoc;
@@ -63,6 +68,7 @@ class PostsCubit extends Cubit<PostsStates> {
   void clearFeed() {
     _feedSub?.cancel();
     _feedSub = null;
+    _feedRetryTimer?.cancel();
     posts.clear();
     allPosts.clear();
     _lastDoc = null;
@@ -73,6 +79,7 @@ class PostsCubit extends Cubit<PostsStates> {
   @override
   Future<void> close() {
     _feedSub?.cancel();
+    _feedRetryTimer?.cancel();
     return super.close();
   }
 
@@ -87,11 +94,18 @@ class PostsCubit extends Cubit<PostsStates> {
   // ── Feed — first page with real-time listener ─────────────────────────────
   void getPosts() {
     _feedSub?.cancel();
+    _feedRetryTimer?.cancel();
     emit(PostsLoadingState());
+    _subscribeFeed();
+  }
 
+  void _subscribeFeed() {
     _feedSub = PostRepository.watchFeed(
       pageSize: _pageSize,
       onData: (snapshot) {
+        // A previous error's retry is no longer needed once data flows again.
+        _feedRetryTimer?.cancel();
+
         if (snapshot.docs.isNotEmpty) {
           _lastDoc = snapshot.docs.last;
         }
@@ -103,7 +117,15 @@ class PostsCubit extends Cubit<PostsStates> {
         _applyFeedFilter();
         emit(PostsSuccessState());
       },
-      onError: (e) => emit(PostsErrorState(e.toString())),
+      onError: (e) {
+        emit(PostsErrorState(e.toString()));
+        // The real-time listener dies permanently on error (this is how
+        // Firestore snapshot listeners behave) — without this, the feed
+        // would never update again until the user manually pulled to
+        // refresh. Reconnect automatically after a short delay instead.
+        _feedRetryTimer?.cancel();
+        _feedRetryTimer = Timer(_feedRetryDelay, _subscribeFeed);
+      },
     );
   }
 

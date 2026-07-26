@@ -106,43 +106,43 @@ service cloud.firestore {
     }
 
     // ── Chats (1-to-1) ────────────────────────────────────────────────────
-    // Chat document ID = sorted(uid1, uid2).join('_')
+    // Chat document ID = sorted(uid1, uid2).join('_'), but the document's
+    // FIELDS store the pair as `participants: [uidA, uidB]` — see
+    // ChatRepository.sendMessage() / ensureChatDoc(). There is no uid1/uid2
+    // field on the document at all.
+    //
+    // CORRECTION (the actual "chat doesn't send or receive anything" bug):
+    // these rules previously checked resource.data.uid1 / uid2, fields that
+    // never exist on any Chat document written by the app. Every comparison
+    // silently evaluated against `null`, so `null == request.auth.uid` was
+    // always false — every single Chats/Messages read and write was
+    // permission-denied, unconditionally, for every user. Fixed by checking
+    // the `participants` array that the code actually writes.
     match /Chats/{chatId} {
-      // These two are safe to use ONLY directly inside this /Chats/{chatId}
-      // match block, where `resource` correctly refers to the Chat document.
+      // Safe to use ONLY directly inside this /Chats/{chatId} match block,
+      // where `resource` correctly refers to the Chat document.
       function isParticipant() {
-        return isAuth() && (
-          resource.data.uid1 == request.auth.uid ||
-          resource.data.uid2 == request.auth.uid
-        );
+        return isAuth() && request.auth.uid in resource.data.participants;
       }
       function willBeParticipant() {
-        return isAuth() && (
-          request.resource.data.uid1 == request.auth.uid ||
-          request.resource.data.uid2 == request.auth.uid
-        );
+        return isAuth() && request.auth.uid in request.resource.data.participants;
       }
 
       allow read:   if isParticipant();
       allow create: if willBeParticipant();
       // Participants can update chat metadata (last message, typing, etc.)
-      // but cannot change who the two participants are.
+      // but cannot change who the participants are.
       allow update: if isParticipant()
-                    && request.resource.data.uid1 == resource.data.uid1
-                    && request.resource.data.uid2 == resource.data.uid2;
+                    && request.resource.data.participants == resource.data.participants;
       allow delete: if false;
 
       // ── Messages sub-collection ──────────────────────────────────────────
-      // CORRECTION (the actual "messaging isn't working" bug): inside this
-      // nested match, `resource` refers to the MESSAGE document, not the
-      // parent Chat — so `isParticipant()` above was silently checking
-      // resource.data.uid1/uid2 against a message doc that has neither
-      // field, always evaluating to null, and always denying access. Every
-      // message read and write was being rejected by these rules. Fixed by
-      // explicitly fetching the parent Chat doc with get().
+      // Inside this nested match, `resource` refers to the MESSAGE document,
+      // not the parent Chat, so the parent Chat doc must be fetched
+      // explicitly with get() to check membership.
       function isChatParticipant() {
         let chat = get(/databases/$(database)/documents/Chats/$(chatId)).data;
-        return isAuth() && (chat.uid1 == request.auth.uid || chat.uid2 == request.auth.uid);
+        return isAuth() && request.auth.uid in chat.participants;
       }
 
       match /Messages/{msgId} {
@@ -155,15 +155,20 @@ service cloud.firestore {
     }
 
     // ── Group chats ────────────────────────────────────────────────────────
+    // GroupModel.toMap() writes the member list as `members` — see
+    // chat_cubit.dart's GroupModel — there is no `memberUids` field on the
+    // document. Same class of bug as Chats/Messages above: every check here
+    // previously referenced a field that never existed, so group creation,
+    // reads, updates, and messaging were all unconditionally denied.
     match /Groups/{groupId} {
       // Safe to use ONLY directly inside this /Groups/{groupId} match block.
       function isMember() {
         return isAuth() &&
-               request.auth.uid in resource.data.memberUids;
+               request.auth.uid in resource.data.members;
       }
       function willBeMember() {
         return isAuth() &&
-               request.auth.uid in request.resource.data.memberUids;
+               request.auth.uid in request.resource.data.members;
       }
 
       allow read:   if isMember();
@@ -176,19 +181,17 @@ service cloud.firestore {
       allow update: if isMember() && (
             resource.data.adminUid == request.auth.uid
          || !request.resource.data.diff(resource.data).affectedKeys()
-                .hasAny(['adminUid', 'memberUids'])
+                .hasAny(['adminUid', 'members'])
       );
       allow delete: if isAuth() && resource.data.adminUid == request.auth.uid;
 
-      // CORRECTION: same bug as Chats/Messages above — isMember() referenced
-      // resource.data.memberUids, which inside this nested match refers to
-      // the MESSAGE doc (no memberUids field), always failing. Group
-      // messaging was completely broken by this for the same reason direct
-      // messaging was. Fixed the same way, via an explicit get().
+      // Inside this nested match, `resource` would refer to the MESSAGE doc
+      // (no `members` field), so the parent Group doc must be fetched
+      // explicitly with get() to check membership.
       function isGroupMember() {
         return isAuth() &&
           request.auth.uid in
-            get(/databases/$(database)/documents/Groups/$(groupId)).data.memberUids;
+            get(/databases/$(database)/documents/Groups/$(groupId)).data.members;
       }
 
       match /Messages/{msgId} {

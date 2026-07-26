@@ -87,10 +87,6 @@ class _ChatsScreenState extends State<ChatsScreen>
             style: TextStyle(color: AppColors.of(context).text, fontSize: 18, fontWeight: FontWeight.bold)),
         actions: [
           IconButton(
-            icon: Icon(Icons.edit_square, color: AppColors.of(context).textSub),
-            tooltip: 'New conversation', onPressed: _openNewChat,
-          ),
-          IconButton(
             icon: Icon(Icons.search, color: AppColors.of(context).textSub),
             onPressed: () => Navigator.pushNamed(context, '/search'),
           ),
@@ -109,6 +105,45 @@ class _ChatsScreenState extends State<ChatsScreen>
         ),
         _GroupsTab(onCreateGroup: _openCreateGroup),
       ]),
+      // Moved from an AppBar icon to a floating action button, matching the
+      // gold circular "create post" FAB on the feed screen.
+      floatingActionButton: AnimatedBuilder(
+        animation: _tabs,
+        builder: (context, _) {
+          if (_tabs.index != 0) return const SizedBox.shrink();
+          return Tooltip(
+            message: 'New conversation',
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: kGold.withValues(alpha: 0.15),
+                    blurRadius: 22,
+                    spreadRadius: 2,
+                    offset: const Offset(0, 6),
+                  ),
+                  BoxShadow(
+                    color: kGold.withValues(alpha: 0.15),
+                    blurRadius: 35,
+                    spreadRadius: 6,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: FloatingActionButton(
+                heroTag: 'chats-new-conversation-fab',
+                elevation: 0,
+                backgroundColor: kGold,
+                foregroundColor: Colors.black,
+                shape: const CircleBorder(),
+                onPressed: _openNewChat,
+                child: const Icon(Icons.edit_square, size: 26),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }
