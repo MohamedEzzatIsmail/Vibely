@@ -168,37 +168,28 @@ class _FeedsScreenState extends State<FeedsScreen> {
                           childCount: 4,
                         ),
                       )
-                    else if (state is PostsErrorState && cubit.posts.isEmpty)
+                    else if (cubit.posts.isEmpty)
                       SliverFillRemaining(
                         hasScrollBody: false,
-                        child: _FeedErrorState(
+                        child: _PremiumEmptyState(
                           palette: palette,
-                          message: state.error,
-                          onRetry: cubit.getPosts,
+                          onCreate: _openCreatePost,
                         ),
                       )
-                    else if (cubit.posts.isEmpty)
-                        SliverFillRemaining(
-                          hasScrollBody: false,
-                          child: _PremiumEmptyState(
+                    else
+                      SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                              (ctx, rawIndex) => _buildFeedItem(
+                            context: ctx,
+                            rawIndex: rawIndex,
+                            cubit: cubit,
+                            state: state,
                             palette: palette,
-                            onCreate: _openCreatePost,
+                            tags: tags,
                           ),
-                        )
-                      else
-                        SliverList(
-                          delegate: SliverChildBuilderDelegate(
-                                (ctx, rawIndex) => _buildFeedItem(
-                              context: ctx,
-                              rawIndex: rawIndex,
-                              cubit: cubit,
-                              state: state,
-                              palette: palette,
-                              tags: tags,
-                            ),
-                            childCount: _feedChildCount(cubit.posts.length),
-                          ),
+                          childCount: _feedChildCount(cubit.posts.length),
                         ),
+                      ),
                     SliverToBoxAdapter(
                       child: SizedBox(
                         height: 108 + MediaQuery.paddingOf(context).bottom,

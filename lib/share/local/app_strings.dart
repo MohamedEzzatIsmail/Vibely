@@ -363,6 +363,8 @@ abstract class AppStrings {
   String get selectMembers;
   String get noConversationsYet;
   String get tapToStartChatting;
+  String get exploreEmptyTitle;
+  String get exploreEmptySubtitle;
 
   // ── Stories bar ───────────────────────────────────────────────────────────
   String get uploadingStoryBar;

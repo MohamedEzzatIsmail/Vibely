@@ -8,7 +8,7 @@ class _TrendingGrid extends StatelessWidget {
     final s = AppStrings.of(context);
     final c = AppColors.of(context);
     return BlocBuilder<PostsCubit, PostsStates>(
-      builder: (ctx, _) {
+      builder: (ctx, state) {
         final cubit  = PostsCubit.get(ctx);
         final sorted = [...cubit.posts]
           ..sort((a, b) => (b.likes + b.commentsCount * 2)
@@ -16,7 +16,13 @@ class _TrendingGrid extends StatelessWidget {
         final top = sorted.take(30).toList();
 
         if (top.isEmpty) {
-          return const ExploreGridSkeleton();
+          // Only show the loading skeleton while the feed is actually
+          // still loading. Once it's loaded and genuinely has nothing,
+          // say so instead of skeleton-loading forever.
+          if (state is PostsLoadingState) {
+            return const ExploreGridSkeleton();
+          }
+          return _EmptyExploreState(s: s, c: c);
         }
 
         // Build a masonry-style mixed layout:
@@ -101,6 +107,39 @@ class _TrendingGrid extends StatelessWidget {
           letterSpacing: 0.3,
         )),
       ]),
+    );
+  }
+}
+
+class _EmptyExploreState extends StatelessWidget {
+  final AppStrings s;
+  final AppColors  c;
+  const _EmptyExploreState({required this.s, required this.c});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.explore_outlined, color: c.textHint, size: 56),
+            const SizedBox(height: 16),
+            Text(
+              s.exploreEmptyTitle,
+              style: TextStyle(color: c.text, fontSize: 17, fontWeight: FontWeight.w700),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              s.exploreEmptySubtitle,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: c.textHint, fontSize: 13.5, height: 1.5),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

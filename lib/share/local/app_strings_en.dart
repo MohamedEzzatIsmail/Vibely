@@ -307,6 +307,8 @@ class _En implements AppStrings {
   @override String get selectMembers            => 'Select members';
   @override String get noConversationsYet       => 'No conversations yet';
   @override String get tapToStartChatting       => 'Tap ✏️ to start chatting';
+  @override String get exploreEmptyTitle        => 'Nothing trending yet';
+  @override String get exploreEmptySubtitle     => 'Be the first to post something — it\'ll show up here for everyone to discover.';
 
   @override String get uploadingStoryBar        => 'Uploading story…';
   @override String get addToStoryBar            => 'Add to Story';

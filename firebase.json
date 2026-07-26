@@ -1,7 +1,29 @@
 {
   "hosting": [
     {
-      "site": "vibely-official",
+      "site": "chat-app-8a50b",
+      "public": "public",
+      "cleanUrls": true,
+      "headers": [
+        {
+          "source": "**",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache, no-store, must-revalidate"
+            }
+          ]
+        }
+      ],
+      "rewrites": [
+        {
+          "source": "/post/**",
+          "destination": "/post/index.html"
+        }
+      ]
+    },
+    {
+      "site": "vibely-app-d17",
       "public": "public",
       "cleanUrls": true,
       "headers": [
@@ -29,9 +51,6 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
-  "database": {
-    "rules": "database.rules.json"
-  },
   "functions": [
     {
       "source": "functions",
@@ -43,28 +62,5 @@
         "firebase-debug.*.log"
       ]
     }
-  ],
-  "flutter": {
-    "platforms": {
-      "android": {
-        "default": {
-          "projectId": "vibely-official",
-          "appId": "1:848287561110:android:1e181df3069c85c3fa19b7",
-          "fileOutput": "android/app/google-services.json"
-        }
-      },
-      "dart": {
-        "lib/firebase_options.dart": {
-          "projectId": "vibely-official",
-          "configurations": {
-            "android": "1:848287561110:android:1e181df3069c85c3fa19b7",
-            "ios": "1:848287561110:ios:38b070b68239cedefa19b7",
-            "macos": "1:848287561110:ios:38b070b68239cedefa19b7",
-            "web": "1:848287561110:web:bd2e3c27eb909c91fa19b7",
-            "windows": "1:848287561110:web:8554327a6af10589fa19b7"
-          }
-        }
-      }
-    }
-  }
+  ]
 }

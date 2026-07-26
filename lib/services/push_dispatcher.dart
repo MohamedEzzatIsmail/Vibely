@@ -25,7 +25,7 @@ class PushDispatcher {
   /// Fill this in once you've deployed /push_server — e.g.
   /// 'https://vibely-push.onrender.com'. Left empty, this is a safe no-op
   /// so nothing breaks before you've deployed it.
-  static const String serverUrl = 'https://vibely-xi.vercel.app/';
+  static const String serverUrl = '';
 
   static Future<void> notify({
     required AppNotification notification,

@@ -36,14 +36,9 @@ service cloud.firestore {
       allow delete: if false;
 
       // ── Notifications sub-collection ─────────────────────────────────────
-      // CORRECTION: this is the collection path the app actually reads and
-      // writes (see notification_service.dart / notification_repository.dart:
-      // `Users/{uid}/notifications/{notifId}`). A previous version of these
-      // rules protected a different, unused top-level path
-      // (`/Notifications/{uid}/UserNotifications`), which meant every real
-      // notification read/write fell through to the deny-all catch-all rule
-      // below — i.e. the notification feature could not work at all against
-      // these rules.
+      // Path matches what the app actually reads/writes (see
+      // notification_service.dart / notification_repository.dart):
+      // `Users/{uid}/notifications/{notifId}`.
       match /notifications/{notifId} {
         // Only the recipient reads their own notifications.
         allow read: if isOwner(uid);
@@ -51,11 +46,16 @@ service cloud.firestore {
         // (e.g. "X liked your post"), but it must honestly claim to be from
         // the caller and be one of the known types — otherwise anyone could
         // forge a notification appearing to be from an arbitrary other user.
+        //
+        // CORRECTION: added 'blocked' — the block-notification feature
+        // (ChatCubit.blockUser) sends this type, and without it here every
+        // one of those writes was rejected by these rules.
         allow create: if isAuth()
                       && request.resource.data.fromUserId == request.auth.uid
                       && request.resource.data.type in
                          ['postLike', 'postComment', 'commentLike',
-                          'commentReply', 'message', 'follow', 'mention'];
+                          'commentReply', 'message', 'follow', 'mention',
+                          'blocked'];
         // Only the recipient can mark as read / delete.
         allow update: if isOwner(uid);
         allow delete: if isOwner(uid);
@@ -85,11 +85,8 @@ service cloud.firestore {
       allow delete: if isMine(resource.data.uid);
 
       // ── Comments sub-collection ──────────────────────────────────────────
-      // CORRECTION: actual path is lowercase `comments` (see
-      // post_repository.dart), and the author field is `userId`, not `uid`
-      // (see PostsCubit.addComment). The previous version of this rule used
-      // `Comments`/`uid`, which never matched real writes and would have
-      // fallen through to the deny-all rule below.
+      // Path is lowercase `comments` (see post_repository.dart), and the
+      // author field is `userId` (see PostsCubit.addComment).
       match /comments/{commentId} {
         allow read:   if isAuth();
         allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
@@ -98,8 +95,6 @@ service cloud.firestore {
         allow delete: if isAuth() && resource.data.userId == request.auth.uid;
 
         // ── Replies sub-collection ─────────────────────────────────────────
-        // Previously had no rule at all (see PostsCubit.addReply /
-        // post_repository.dart), so replies could never be read or written.
         match /replies/{replyId} {
           allow read:   if isAuth();
           allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
@@ -113,6 +108,8 @@ service cloud.firestore {
     // ── Chats (1-to-1) ────────────────────────────────────────────────────
     // Chat document ID = sorted(uid1, uid2).join('_')
     match /Chats/{chatId} {
+      // These two are safe to use ONLY directly inside this /Chats/{chatId}
+      // match block, where `resource` correctly refers to the Chat document.
       function isParticipant() {
         return isAuth() && (
           resource.data.uid1 == request.auth.uid ||
@@ -136,17 +133,30 @@ service cloud.firestore {
       allow delete: if false;
 
       // ── Messages sub-collection ──────────────────────────────────────────
+      // CORRECTION (the actual "messaging isn't working" bug): inside this
+      // nested match, `resource` refers to the MESSAGE document, not the
+      // parent Chat — so `isParticipant()` above was silently checking
+      // resource.data.uid1/uid2 against a message doc that has neither
+      // field, always evaluating to null, and always denying access. Every
+      // message read and write was being rejected by these rules. Fixed by
+      // explicitly fetching the parent Chat doc with get().
+      function isChatParticipant() {
+        let chat = get(/databases/$(database)/documents/Chats/$(chatId)).data;
+        return isAuth() && (chat.uid1 == request.auth.uid || chat.uid2 == request.auth.uid);
+      }
+
       match /Messages/{msgId} {
-        allow read:   if isParticipant();
-        allow create: if isParticipant()
+        allow read:   if isChatParticipant();
+        allow create: if isChatParticipant()
                       && request.resource.data.senderId == request.auth.uid;
-        allow update: if isParticipant();   // edit / reactions / pin / delete flag
-        allow delete: if false;             // soft-delete via isDeleted flag
+        allow update: if isChatParticipant();   // edit / reactions / pin / delete flag
+        allow delete: if false;                 // soft-delete via isDeleted flag
       }
     }
 
     // ── Group chats ────────────────────────────────────────────────────────
     match /Groups/{groupId} {
+      // Safe to use ONLY directly inside this /Groups/{groupId} match block.
       function isMember() {
         return isAuth() &&
                request.auth.uid in resource.data.memberUids;
@@ -170,17 +180,25 @@ service cloud.firestore {
       );
       allow delete: if isAuth() && resource.data.adminUid == request.auth.uid;
 
+      // CORRECTION: same bug as Chats/Messages above — isMember() referenced
+      // resource.data.memberUids, which inside this nested match refers to
+      // the MESSAGE doc (no memberUids field), always failing. Group
+      // messaging was completely broken by this for the same reason direct
+      // messaging was. Fixed the same way, via an explicit get().
+      function isGroupMember() {
+        return isAuth() &&
+          request.auth.uid in
+            get(/databases/$(database)/documents/Groups/$(groupId)).data.memberUids;
+      }
+
       match /Messages/{msgId} {
-        allow read:   if isMember();
+        allow read:   if isGroupMember();
         // 'system' is used for auto-generated messages (e.g. "X left the
-        // group") — see ChatCubit.leaveGroup(). Without this, those writes
-        // always failed with permission-denied because the sender isn't a
-        // real auth.uid, which broke the "leave group" flow (the user was
-        // removed from the group but the UI never got to update).
-        allow create: if isMember()
+        // group") — see ChatCubit.leaveGroup().
+        allow create: if isGroupMember()
                       && (request.resource.data.senderId == request.auth.uid
                           || request.resource.data.senderId == 'system');
-        allow update: if isMember();
+        allow update: if isGroupMember();
         allow delete: if false;
       }
     }
@@ -194,8 +212,6 @@ service cloud.firestore {
       allow delete: if isMine(resource.data.uid);
 
       // ── Story comments sub-collection ───────────────────────────────────
-      // Previously uncovered (see StoriesCubit.addStoryComment), so story
-      // comments could never be read or written.
       match /Comments/{commentId} {
         allow read:   if isAuth();
         allow create: if isAuth() && request.resource.data.uid == request.auth.uid;
@@ -205,8 +221,6 @@ service cloud.firestore {
     }
 
     // ── Reports ────────────────────────────────────────────────────────────
-    // Previously uncovered (see report_sheet.dart / chat_repository.dart), so
-    // the "Report" button could never actually submit a report.
     match /Reports/{reportId} {
       // Reports are submit-only from the client; reporter identity is
       // locked to the caller so reports can't be forged as coming from

@@ -21,7 +21,7 @@ class EmailVerificationScreen extends StatefulWidget {
 class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   Timer? _pollTimer;
   bool   _checking  = false;
-  int    _countdown = 30; // resend cooldown
+  int    _countdown = 30;
   Timer? _cdTimer;
 
   @override
@@ -64,7 +64,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const HomeScreen()),
-        (_) => false,
+            (_) => false,
       );
     }
   }
@@ -107,7 +107,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                 Container(
                   width: 80, height: 80,
                   decoration: BoxDecoration(
-                    color: AppColors.of(context).surface, shape: BoxShape.circle),
+                      color: AppColors.of(context).surface, shape: BoxShape.circle),
                   child: const Icon(Icons.mark_email_unread_rounded,
                       color: Color(0xFFe5c687), size: 38),
                 ),
@@ -118,9 +118,29 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                 const SizedBox(height: 10),
                 Text(
                   'We sent a verification link to\n${widget.email}\n\n'
-                  'Tap the link in the email, then come back here.',
+                      'Tap the link in the email, then come back here.',
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.grey, fontSize: 14, height: 1.5),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.of(context).surface,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline_rounded, color: Color(0xFFe5c687), size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          "Don't see it? Check your spam/junk folder — if you find it there, mark it as \"Not spam\" so future emails land in your inbox.",
+                          style: TextStyle(color: AppColors.of(context).textHint, fontSize: 12.5, height: 1.4),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 32),
                 SizedBox(
@@ -130,10 +150,10 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                     onPressed: _checking ? null : _checkNow,
                     child: _checking
                         ? const SizedBox(width: 20, height: 20,
-                            child: CircularProgressIndicator(
-                                color: Colors.black, strokeWidth: 2))
+                        child: CircularProgressIndicator(
+                            color: Colors.black, strokeWidth: 2))
                         : const Text("I've verified — Continue",
-                            style: TextStyle(fontWeight: FontWeight.bold)),
+                        style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -159,7 +179,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                     Navigator.pushAndRemoveUntil(
                       context,
                       MaterialPageRoute(builder: (_) => LoginScreen()),
-                      (_) => false,
+                          (_) => false,
                     );
                   },
                   child: Text(AppStrings.of(context).backToSignIn,

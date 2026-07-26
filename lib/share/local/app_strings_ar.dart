@@ -307,6 +307,8 @@ class _Ar implements AppStrings {
   @override String get selectMembers            => 'اختر الأعضاء';
   @override String get noConversationsYet       => 'لا توجد محادثات بعد';
   @override String get tapToStartChatting       => 'اضغط ✏️ لبدء محادثة';
+  @override String get exploreEmptyTitle        => 'لا يوجد شيء رائج بعد';
+  @override String get exploreEmptySubtitle     => 'كن أول من ينشر شيئًا — سيظهر هنا ليكتشفه الجميع.';
 
   @override String get uploadingStoryBar        => 'جارٍ رفع القصة…';
   @override String get addToStoryBar            => 'إضافة إلى القصة';

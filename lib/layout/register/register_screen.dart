@@ -17,6 +17,7 @@ import '../../share/local/app_strings.dart';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl_phone_field/intl_phone_field.dart';
 
 import '../../share/local/components.dart';
 import '../../share/local/constants.dart';
@@ -256,18 +257,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       const SizedBox(height: 20),
 
                       // ── Phone ──────────────────────────────────────────
-                      TextFormField(
-                        controller: _phoneController,
+                      IntlPhoneField(
                         keyboardType: TextInputType.phone,
-                        textDirection: TextDirection.ltr,
-                        validator: Validators.phone,
+                        // Phone is optional here — an empty field is valid,
+                        // so no required-field validation is enforced.
+                        validator: (value) => null,
                         style: TextStyle(color: AppColors.of(context).isDark ? Colors.white : Colors.grey, fontSize: 16),
+                        dropdownTextStyle: TextStyle(color: AppColors.of(context).isDark ? Colors.white : Colors.grey),
                         decoration: InputDecoration(
                           labelText: AppStrings.of(context).phoneOptional,
                           labelStyle: TextStyle(color: AppColors.of(context).isDark ? Colors.white : Colors.grey),
-                          prefixIcon: Icon(Icons.phone_outlined, color: AppColors.of(context).isDark ? Colors.white : Colors.grey),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         ),
+                        // Sensible default landing country — every user can
+                        // still change it via the flag dropdown regardless.
+                        initialCountryCode: 'EG',
+                        onChanged: (phone) {
+                          // Store the fully composed E.164 number (e.g.
+                          // +201234567890) — the app's existing phone field
+                          // downstream (register_cubit, UserModel, Firestore)
+                          // is unchanged; it just receives a correctly
+                          // formatted number instead of manually typed text.
+                          _phoneController.text =
+                          phone.number.isEmpty ? '' : phone.completeNumber;
+                        },
                       ),
                       const SizedBox(height: 36),
 
