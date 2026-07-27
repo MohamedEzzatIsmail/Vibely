@@ -212,7 +212,22 @@ class _ChatScreenState extends State<ChatScreen>
   // ── BUILD ─────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<ChatCubit, ChatStates>(builder: (context, state) {
+    return BlocConsumer<ChatCubit, ChatStates>(
+      listener: (context, state) {
+        // Every send/upload/action failure in ChatCubit emits ChatErrorState,
+        // but until now nothing displayed it — failures looked identical to
+        // "nothing happened." Surface it so the user knows something went
+        // wrong instead of silently retyping into a dead send button.
+        if (state is ChatErrorState) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.message),
+              backgroundColor: Colors.red.shade700,
+            ),
+          );
+        }
+      },
+      builder: (context, state) {
       final disappearDays = cubit.getDisappearDays(widget.user.uid!);
       return Scaffold(
         backgroundColor: AppColors.of(context).bg,

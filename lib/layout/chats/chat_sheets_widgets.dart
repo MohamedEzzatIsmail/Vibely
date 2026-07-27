@@ -7,32 +7,46 @@ class _NewChatSheet extends StatefulWidget {
 }
 class _NewChatSheetState extends State<_NewChatSheet> {
   final _ctrl = TextEditingController();
+  List<UserModel> _allUsers = [];
   List<UserModel> _results = [];
-  bool _loading = false;
+  bool _loading = true;
 
-  // BUG FIX: this used to be a Firestore range query
-  // (`name >= q && name <= q + '\uf8ff'`), which is case-sensitive because
-  // Firestore compares by raw Unicode code point. Typing "moh" would never
-  // match a stored name like "Mohamed" since uppercase letters sort before
-  // lowercase ones — the query silently returned nothing for almost any
-  // real-world capitalization. Fixed by fetching a bounded set of users once
-  // and filtering client-side, case-insensitively, as a substring match
-  // (not just a prefix match, which is friendlier too).
-  Future<void> _search(String q) async {
-    final query = q.trim();
-    if (query.isEmpty) { setState(() => _results = []); return; }
-    setState(() => _loading = true);
+  @override
+  void initState() {
+    super.initState();
+    _loadAllUsers();
+  }
+
+  // PERFORMANCE FIX: this used to run a fresh 200-document Firestore fetch
+  // on every single keystroke — typing a 5-letter name meant 5 separate
+  // network round trips and 5x the document reads, and results could arrive
+  // out of order if a fast typist outran a slow response. Now the user list
+  // is fetched exactly once when the sheet opens, and every keystroke just
+  // filters that same in-memory list — instant, no network, no race.
+  Future<void> _loadAllUsers() async {
     final snap =
         await FirebaseFirestore.instance.collection('Users').limit(200).get();
     final myUid = widget.cubit.currentUser?.uid;
-    final lower = query.toLowerCase();
+    if (!mounted) return;
     setState(() {
-      _results = snap.docs
+      _allUsers = snap.docs
           .map((d) => UserModel.fromJson(d.data()))
-          .where((u) =>
-              u.uid != myUid && (u.name ?? '').toLowerCase().contains(lower))
+          .where((u) => u.uid != myUid)
           .toList();
       _loading = false;
+    });
+  }
+
+  void _search(String q) {
+    final query = q.trim().toLowerCase();
+    if (query.isEmpty) {
+      setState(() => _results = []);
+      return;
+    }
+    setState(() {
+      _results = _allUsers
+          .where((u) => (u.name ?? '').toLowerCase().contains(query))
+          .toList();
     });
   }
 

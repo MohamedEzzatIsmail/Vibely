@@ -32,9 +32,10 @@ class ChatRepository {
   // ── Presence ─────────────────────────────────────────────────────────────
   static StreamSubscription<DocumentSnapshot<Map<String, dynamic>>> watchUser(
     String uid,
-    void Function(DocumentSnapshot<Map<String, dynamic>> doc) onData,
-  ) {
-    return _users.doc(uid).snapshots().listen(onData);
+    void Function(DocumentSnapshot<Map<String, dynamic>> doc) onData, {
+    void Function(Object error)? onError,
+  }) {
+    return _users.doc(uid).snapshots().listen(onData, onError: onError);
   }
 
   static Future<void> setOnline({
@@ -67,6 +68,7 @@ class ChatRepository {
     required String chatId,
     required int limit,
     required void Function(QuerySnapshot<Map<String, dynamic>> snapshot) onData,
+    void Function(Object error)? onError,
   }) {
     return _chats
         .doc(chatId)
@@ -74,7 +76,7 @@ class ChatRepository {
         .orderBy('dateTime', descending: true)
         .limit(limit)
         .snapshots()
-        .listen(onData);
+        .listen(onData, onError: onError);
   }
 
   // ── Send (1-to-1) — generic batched send used by text/image/video/voice/
@@ -386,11 +388,12 @@ class ChatRepository {
   static StreamSubscription<QuerySnapshot<Map<String, dynamic>>> watchGroups({
     required String myUid,
     required void Function(QuerySnapshot<Map<String, dynamic>> snapshot) onData,
+    void Function(Object error)? onError,
   }) {
     return _groups
         .where('members', arrayContains: myUid)
         .snapshots()
-        .listen(onData);
+        .listen(onData, onError: onError);
   }
 
   static Future<QuerySnapshot<Map<String, dynamic>>> fetchGroups(String myUid) {
@@ -401,6 +404,7 @@ class ChatRepository {
     required String groupId,
     required int limit,
     required void Function(QuerySnapshot<Map<String, dynamic>> snapshot) onData,
+    void Function(Object error)? onError,
   }) {
     return _groups
         .doc(groupId)
@@ -408,7 +412,7 @@ class ChatRepository {
         .orderBy('dateTime', descending: true)
         .limit(limit)
         .snapshots()
-        .listen(onData);
+        .listen(onData, onError: onError);
   }
 
   static Future<void> sendGroupMessage({
@@ -526,6 +530,7 @@ class ChatRepository {
   static StreamSubscription<QuerySnapshot<Map<String, dynamic>>> watchLastMessage({
     required String chatId,
     required void Function(QuerySnapshot<Map<String, dynamic>> snapshot) onData,
+    void Function(Object error)? onError,
   }) {
     return _chats
         .doc(chatId)
@@ -533,28 +538,30 @@ class ChatRepository {
         .orderBy('dateTime', descending: true)
         .limit(20)
         .snapshots()
-        .listen(onData);
+        .listen(onData, onError: onError);
   }
 
   static StreamSubscription<QuerySnapshot<Map<String, dynamic>>> watchUnread({
     required String chatId,
     required String myUid,
     required void Function(QuerySnapshot<Map<String, dynamic>> snapshot) onData,
+    void Function(Object error)? onError,
   }) {
     return _chats
         .doc(chatId)
         .collection('Messages')
         .where('receiverId', isEqualTo: myUid)
         .snapshots()
-        .listen(onData);
+        .listen(onData, onError: onError);
   }
 
   // ── Typing ────────────────────────────────────────────────────────────────
   static StreamSubscription<DocumentSnapshot<Map<String, dynamic>>> watchTyping({
     required String chatId,
     required void Function(DocumentSnapshot<Map<String, dynamic>> doc) onData,
+    void Function(Object error)? onError,
   }) {
-    return _chats.doc(chatId).snapshots().listen(onData);
+    return _chats.doc(chatId).snapshots().listen(onData, onError: onError);
   }
 
   static Future<void> setTypingUser({

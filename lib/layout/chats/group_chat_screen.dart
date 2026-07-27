@@ -26,10 +26,20 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     final canSend = isAdmin || _group.onlyAdminsCanSend != true;
 
     return BlocListener<ChatCubit, ChatStates>(
-      listener: (_, state) {
+      listener: (context, state) {
         if (state is ChatGroupUpdatedState) {
           final fresh = cubit.groups.firstWhere((g) => g.id == _group.id, orElse: () => _group);
           setState(() => _group = fresh);
+        }
+        // Send/upload failures were emitted as ChatErrorState but never shown
+        // anywhere — group chat looked just as "dead" as 1-to-1 chat did.
+        if (state is ChatErrorState) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.message),
+              backgroundColor: Colors.red.shade700,
+            ),
+          );
         }
       },
       child: Scaffold(

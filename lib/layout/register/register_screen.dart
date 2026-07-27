@@ -1,14 +1,3 @@
-// lib/layout/register/register_screen.dart
-//
-// Changes from original:
-//  • All four validators now return proper error strings (no more print+return null).
-//  • Added optional profile photo picker with camera/gallery choice sheet.
-//  • Avatar preview shown above the form so users see their chosen photo.
-//  • Image picked locally; passed to RegisterCubit.userRegister so it can
-//    upload it instead of the bundled default_avatar.png.
-//  • RegisterScreen is now a StatefulWidget to hold the picked File state.
-//  • Styling kept identical to the rest of the dark app (0xFF0D1117 bg, kGold btn).
-
 import 'dart:io';
 import '../../share/style/app_colors.dart';
 

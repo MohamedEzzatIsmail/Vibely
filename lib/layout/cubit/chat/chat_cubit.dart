@@ -123,6 +123,30 @@ class ChatCubit extends Cubit<ChatStates> {
   final Map<String, StreamSubscription> _unreadSubs   = {};
   final Map<String, int>                _streamLimitMap = {};
 
+  // ── Listener resilience ────────────────────────────────────────────────────
+  // Every real-time Firestore listener below dies permanently the moment it
+  // hits an error (network blip, transient auth hiccup, etc.) — Flutter/
+  // Firestore don't auto-reconnect a .snapshots() stream on error. Without
+  // this, one bad moment on the network would leave chat silently frozen
+  // until the user backed out of the screen and back in. Every listener now
+  // schedules a reconnect through here instead of just dying.
+  final Map<String, Timer> _retryTimers = {};
+  static const _retryDelay = Duration(seconds: 3);
+
+  void _scheduleRetry(String key, void Function() resubscribe) {
+    _retryTimers[key]?.cancel();
+    _retryTimers[key] = Timer(_retryDelay, resubscribe);
+  }
+
+  void _clearRetry(String key) => _retryTimers[key]?.cancel();
+
+  void _cancelAllRetries() {
+    for (final t in _retryTimers.values) {
+      t.cancel();
+    }
+    _retryTimers.clear();
+  }
+
   // ── Init ───────────────────────────────────────────────────────────────────
   void setCurrentUser(UserModel user) {
     currentUser = user;
@@ -161,6 +185,8 @@ class ChatCubit extends Cubit<ChatStates> {
   void disposeChat(String receiverId) {
     _messageSubs[receiverId]?.cancel();
     _typingSubs[receiverId]?.cancel();
+    _clearRetry('messages_$receiverId');
+    _clearRetry('typing_$receiverId');
   }
 
   void disposeAllChats() {
@@ -170,6 +196,7 @@ class ChatCubit extends Cubit<ChatStates> {
       ..._presenceSubs.values, ..._groupMsgSubs.values,
     ]) { s.cancel(); }
     _groupsListener?.cancel();
+    _cancelAllRetries();
   }
 
   @override
@@ -182,10 +209,15 @@ class ChatCubit extends Cubit<ChatStates> {
   // ── Real-time presence ─────────────────────────────────────────────────────
   void listenPresence(String uid) {
     _presenceSubs[uid]?.cancel();
+    final key = 'presence_$uid';
     _presenceSubs[uid] = ChatRepository.watchUser(uid, (s) {
+      _clearRetry(key);
       if (!s.exists) return;
       livePresence[uid] = UserModel.fromJson(s.data()!);
       emit(ChatOnlineUpdatedState());
+    }, onError: (e) {
+      debugPrint('Presence listener error for $uid: $e');
+      _scheduleRetry(key, () => listenPresence(uid));
     });
   }
 
@@ -204,11 +236,13 @@ class ChatCubit extends Cubit<ChatStates> {
     _messageSubs[receiverId]?.cancel();
     final chatId = _getChatId(receiverId);
     _streamLimitMap[receiverId] = limit;
+    final key = 'messages_$receiverId';
 
     _messageSubs[receiverId] = ChatRepository.watchMessages(
       chatId: chatId,
       limit: limit,
       onData: (snapshot) {
+        _clearRetry(key);
         final myUid        = currentUser?.uid ?? '';
         final disappearDays = _disappearDaysMap[chatId];
         final cutoff = disappearDays != null
@@ -234,6 +268,11 @@ class ChatCubit extends Cubit<ChatStates> {
         if (snapshot.docs.isNotEmpty) lastDocs[receiverId] = snapshot.docs.last;
         hasMoreMap[receiverId] = snapshot.docs.length >= limit;
         emit(ChatMessagesUpdatedState());
+      },
+      onError: (e) {
+        debugPrint('Message listener error for $receiverId: $e');
+        _scheduleRetry(key, () =>
+            _startRealtimeStream(receiverId, limit: _streamLimitMap[receiverId] ?? limit));
       },
     );
   }
@@ -703,11 +742,17 @@ class ChatCubit extends Cubit<ChatStates> {
   void listenGroups() {
     if (currentUser?.uid == null) return;
     _groupsListener?.cancel();
+    const key = 'groups';
     _groupsListener = ChatRepository.watchGroups(
       myUid: currentUser!.uid!,
       onData: (snap) {
+        _clearRetry(key);
         groups = snap.docs.map((d) => GroupModel.fromJson(d.id, d.data())).toList();
         emit(ChatGroupLoadedState());
+      },
+      onError: (e) {
+        debugPrint('Groups listener error: $e');
+        _scheduleRetry(key, listenGroups);
       },
     );
   }
@@ -722,10 +767,12 @@ class ChatCubit extends Cubit<ChatStates> {
 
   void listenGroupMessages(String groupId) {
     _groupMsgSubs[groupId]?.cancel();
+    final key = 'groupMsgs_$groupId';
     _groupMsgSubs[groupId] = ChatRepository.watchGroupMessages(
       groupId: groupId,
       limit: 30,
       onData: (snap) {
+        _clearRetry(key);
         final myUid  = currentUser?.uid ?? '';
         final entries = snap.docs.map((d) => MapEntry(d.id, MessageModel.fromJson(d.data())))
             .where((e) => !e.value.deletedForMe.contains(myUid))
@@ -735,6 +782,10 @@ class ChatCubit extends Cubit<ChatStates> {
         groupMessagesMap[groupId]        = entries.map((e) => e.value).toList();
         groupMessagesWithIdsMap[groupId] = entries;
         emit(ChatMessagesUpdatedState());
+      },
+      onError: (e) {
+        debugPrint('Group message listener error for $groupId: $e');
+        _scheduleRetry(key, () => listenGroupMessages(groupId));
       },
     );
   }
@@ -953,11 +1004,13 @@ class ChatCubit extends Cubit<ChatStates> {
     final chatId  = _getChatId(userId);
     final myUid   = currentUser?.uid ?? '';
     _lastMsgSubs[userId]?.cancel();
+    final key = 'lastMsg_$userId';
     // FIX: fetch more than 1 so we can skip deleted/hidden messages and fall
     // back to the most-recent visible one (up to 20 candidates is plenty).
     _lastMsgSubs[userId] = ChatRepository.watchLastMessage(
       chatId: chatId,
       onData: (snap) {
+        _clearRetry(key);
         for (final doc in snap.docs) {
           final d = doc.data();
 
@@ -993,18 +1046,28 @@ class ChatCubit extends Cubit<ChatStates> {
         lastSender[userId]   = null;
         emit(ChatMessagesUpdatedState());
       },
+      onError: (e) {
+        debugPrint('Last-message listener error for $userId: $e');
+        _scheduleRetry(key, () => _listenLastMessage(userId));
+      },
     );
   }
 
   void _listenUnread(String userId) {
     final chatId = _getChatId(userId);
     _unreadSubs[userId]?.cancel();
+    final key = 'unread_$userId';
     _unreadSubs[userId] = ChatRepository.watchUnread(
       chatId: chatId,
       myUid: currentUser!.uid!,
       onData: (s) {
+        _clearRetry(key);
         unreadMap[userId] = s.docs.where((e) => e['seen'] == false).length;
         emit(ChatUnreadUpdatedState());
+      },
+      onError: (e) {
+        debugPrint('Unread listener error for $userId: $e');
+        _scheduleRetry(key, () => _listenUnread(userId));
       },
     );
   }
@@ -1014,11 +1077,17 @@ class ChatCubit extends Cubit<ChatStates> {
   void _listenTyping(String userId) {
     final chatId = _getChatId(userId);
     _typingSubs[userId]?.cancel();
+    final key = 'typing_$userId';
     _typingSubs[userId] = ChatRepository.watchTyping(
       chatId: chatId,
       onData: (doc) {
+        _clearRetry(key);
         typingUserId = doc.data()?['typingUserId'];
         emit(ChatTypingUpdatedState());
+      },
+      onError: (e) {
+        debugPrint('Typing listener error for $userId: $e');
+        _scheduleRetry(key, () => _listenTyping(userId));
       },
     );
   }
