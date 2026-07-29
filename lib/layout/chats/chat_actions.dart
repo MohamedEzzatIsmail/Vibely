@@ -1,16 +1,15 @@
 part of 'chat.dart';
 
 // ──────────────────────────────────────────────────────────────────────────────
-//  Action-sheet / dialog methods extracted from _ChatScreenState.
-//  Kept as an extension (not a separate class) so every method below keeps
-//  full access to _ChatScreenState's fields and setState, exactly as if this
-//  code still lived inline in chat.dart. Nothing about behavior changes —
-//  only the file these methods live in.
+//  Action-sheet / dialog methods for the chat screen — delete, edit, forward,
+//  block/report, etc. Kept as an extension (not a separate class) so every
+//  method here has full access to _ChatScreenState's fields and setState.
 // ──────────────────────────────────────────────────────────────────────────────
 extension ChatScreenActions on _ChatScreenState {
   // ── 5-second undo snackbar ───────────────────────────────────────────────────
-  // Called right after a delete. The actual Firestore write is deferred 5 s so
-  // the user can tap Undo and abort. If they do nothing it commits automatically.
+  /// Shows an undo snackbar right after a delete. The actual Firestore write
+  /// is deferred 5 seconds so the user can tap Undo and abort it; if they do
+  /// nothing, it commits automatically once the timer elapses.
   void _showUndoDeleteSnack({
     required MessageModel msg,
     required String       docId,
@@ -99,8 +98,8 @@ extension ChatScreenActions on _ChatScreenState {
         .whereType<MessageModel>()
         .toList();
 
-    // FIX: if every selected message is already a deleted placeholder,
-    // skip the full dialog and only offer "Remove from my chat".
+    // If every selected message is already a deleted placeholder, skip the
+    // full dialog and only offer "Remove from my chat".
     final allDeleted = allMsgs.isNotEmpty &&
         allMsgs.every((m) => m.isDeleted || m.deletedByOther == true);
     if (allDeleted) {
@@ -239,11 +238,11 @@ extension ChatScreenActions on _ChatScreenState {
   }
 
 
-  // ── Action sheet ─────────────────────────────────────────────────────────────
+  /// Shows the full action sheet for a message — or, for an already-deleted
+  /// message, a minimal sheet with just "remove from my chat".
   void _showMessageActions(MessageModel msg, String docId) {
     if (_selecting) return;
     HapticFeedback.mediumImpact();
-    // FIX: deleted messages get their own minimal sheet — just "remove from my chat"
     if (msg.isDeleted || msg.deletedByOther == true) {
       _showDeletedMsgActions(msg, docId);
       return;
@@ -279,7 +278,7 @@ extension ChatScreenActions on _ChatScreenState {
           const SizedBox(height: 10),
           const Divider(color: Colors.white12, height: 1),
           const SizedBox(height: 6),
-          // Copy (Prompt 3 — FIRST item)
+          // Copy text (first item in the sheet)
           if (msg.text?.isNotEmpty == true)
             _ActionTile(
               icon: Icons.copy_rounded, label: 'Copy text',
@@ -323,7 +322,6 @@ extension ChatScreenActions on _ChatScreenState {
               icon: Icons.delete_outline, label: 'Delete for me',
               onTap: () {
                 Navigator.pop(context);
-                // FIX: show 5-second undo snack; actual write deferred 5 s
                 _showUndoDeleteSnack(
                   msg:          msg,
                   docId:        docId,
@@ -337,7 +335,6 @@ extension ChatScreenActions on _ChatScreenState {
               color: Colors.redAccent,
               onTap: () {
                 Navigator.pop(context);
-                // FIX: show 5-second undo snack; actual write deferred 5 s
                 _showUndoDeleteSnack(
                   msg:          msg,
                   docId:        docId,
@@ -351,7 +348,6 @@ extension ChatScreenActions on _ChatScreenState {
               icon: Icons.hide_source_rounded, label: 'Delete for me',
               onTap: () {
                 Navigator.pop(context);
-                // FIX: show 5-second undo snack; actual write deferred 5 s
                 _showUndoDeleteSnack(
                   msg:          msg,
                   docId:        docId,

@@ -1,10 +1,7 @@
-// lib/layout/notifications/notifications_screen.dart
-//
-// Fix: RefreshIndicator now calls the correct pattern to reload notifications.
-// NotificationsCubit has NO getNotifications() method — notifications are loaded
-// via a real-time stream started in setUser(). Refreshing re-calls setUser()
-// which cancels and restarts the stream subscription, effectively refreshing.
-// Empty state uses the illustrated EmptyNotificationsState widget.
+/// Notifications screen. Notifications load via a real-time stream started
+/// in `NotificationsCubit.setUser()` — there's no separate one-shot fetch
+/// method, so pull-to-refresh re-calls `setUser()`, which cancels and
+/// restarts that subscription. Empty state uses [EmptyNotificationsState].
 
 import 'package:vibely/layout/cubit/notifications/notifications_cubit.dart';
 import 'package:vibely/models/notification_model.dart';

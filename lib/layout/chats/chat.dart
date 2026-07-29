@@ -1,8 +1,7 @@
-// lib/layout/chats/chat.dart
-// record and just_audio imports removed from this file.
-// Voice recording → VoiceRecorderButton (voice_recorder_button.dart)
-// Voice playback  → VoiceMessagePlayer  (voice_message_player.dart)
-// This removes the "Target of URI doesn't exist" errors entirely from chat.dart.
+/// The 1-to-1 chat screen: message list, composer, media/voice sending,
+/// selection mode, and search-within-conversation. Voice recording and
+/// playback live in their own widgets (VoiceRecorderButton,
+/// VoiceMessagePlayer) rather than here.
 
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
@@ -192,9 +191,10 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   // ── Selection ────────────────────────────────────────────────────────────────
+  /// Enters selection mode on long-press. Deleted messages are still
+  /// selectable — the user needs to be able to select and clear them too,
+  /// not just live ones.
   void _onBubbleLongPress(String docId, MessageModel msg) {
-    // FIX: deleted messages ARE selectable — user needs to be able to
-    // long-press them so they can select + delete the local placeholder too.
     HapticFeedback.mediumImpact();
     setState(() => _selected.add(docId));
   }
@@ -250,7 +250,7 @@ class _ChatScreenState extends State<ChatScreen>
             ),
           Expanded(child: Stack(children: [
             _buildList(),
-            // Per-bubble upload progress (Prompt 14)
+            // Per-bubble upload progress
             if (state is ChatSendingMediaState)
               Positioned(right: 12, bottom: 12,
                   child: _UploadProgressBubble(progress: state.progress)),
@@ -299,7 +299,7 @@ class _ChatScreenState extends State<ChatScreen>
                   color: AppColors.of(context).textSub, size: 20),
               onPressed: () => Navigator.pop(context),
             ),
-            // Tap to open contact profile (Prompt 17)
+            // Tap to open contact profile
             GestureDetector(
               onTap: _showContactProfile,
               child: Row(children: [
@@ -404,7 +404,7 @@ class _ChatScreenState extends State<ChatScreen>
       title: Text('${_selected.length} selected',
           style: TextStyle(color: AppColors.of(context).text, fontSize: 15)),
       actions: [
-        // Forward selected (Prompt 25)
+        // Forward selected
         IconButton(
           icon: Icon(Icons.forward_rounded, color: AppColors.of(context).textSub),
           onPressed: () {
@@ -519,8 +519,8 @@ class _ChatScreenState extends State<ChatScreen>
           child: Text(AppStrings.of(context).noResults, style: TextStyle(color: AppColors.of(context).textHint)));
     }
 
-    // FIX: pre-compute which calendar days have at least one visible message.
-    // A "visible" message here means it exists in entries (deletedForMe are
+    // Pre-compute which calendar days have at least one visible message. A
+    // "visible" message here means it exists in entries (deletedForMe are
     // already stripped by the cubit). We only show a date separator for days
     // that actually have messages — so if every message on a day is removed,
     // the separator for that day disappears too.
@@ -675,7 +675,7 @@ class _ChatScreenState extends State<ChatScreen>
       child: SafeArea(top: false, child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          // Media picker (Prompt 12 — camera inside)
+          // Media picker (includes camera)
           _MediaPickerButton(receiverId: widget.user.uid!, cubit: cubit),
           const SizedBox(width: 8),
           Expanded(child: Container(
@@ -700,9 +700,9 @@ class _ChatScreenState extends State<ChatScreen>
             ),
           )),
           const SizedBox(width: 8),
-          // FIX: ScaleTransition inside AnimatedSwitcher with an unconstrained
-          // parent causes RenderStack layout crash. Use SizedBox + Opacity
-          // switch to keep sizing stable while still animating.
+          // Fixed-size box keeps layout stable while the send/mic icon
+          // cross-fades — an unconstrained AnimatedSwitcher here would
+          // otherwise crash on layout.
           SizedBox(
             width: 44, height: 44,
             child: AnimatedSwitcher(

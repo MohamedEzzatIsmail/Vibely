@@ -119,10 +119,9 @@ class PostsCubit extends Cubit<PostsStates> {
       },
       onError: (e) {
         emit(PostsErrorState(e.toString()));
-        // The real-time listener dies permanently on error (this is how
-        // Firestore snapshot listeners behave) — without this, the feed
-        // would never update again until the user manually pulled to
-        // refresh. Reconnect automatically after a short delay instead.
+        // Firestore snapshot listeners die permanently on error rather than
+        // auto-reconnecting, so this schedules a fresh subscription instead
+        // of leaving the feed stuck until the user manually refreshes.
         _feedRetryTimer?.cancel();
         _feedRetryTimer = Timer(_feedRetryDelay, _subscribeFeed);
       },

@@ -17,12 +17,9 @@ class _NewChatSheetState extends State<_NewChatSheet> {
     _loadAllUsers();
   }
 
-  // PERFORMANCE FIX: this used to run a fresh 200-document Firestore fetch
-  // on every single keystroke — typing a 5-letter name meant 5 separate
-  // network round trips and 5x the document reads, and results could arrive
-  // out of order if a fast typist outran a slow response. Now the user list
-  // is fetched exactly once when the sheet opens, and every keystroke just
-  // filters that same in-memory list — instant, no network, no race.
+  /// Fetches the user list once when the sheet opens; [_search] then
+  /// filters this same in-memory list on every keystroke rather than
+  /// re-querying Firestore per character typed.
   Future<void> _loadAllUsers() async {
     final snap =
         await FirebaseFirestore.instance.collection('Users').limit(200).get();

@@ -46,7 +46,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         backgroundColor: c.bg,
         appBar: AppBar(
           backgroundColor: c.surface,
-          // Prompt 6 — tap header to open GroupInfoScreen
+          // Tapping the header opens the group's info/settings screen
           title: GestureDetector(
             onTap: () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => GroupInfoScreen(group: _group))),
@@ -132,7 +132,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 );
               },
             )),
-            // Prompt 11 — locked banner vs input
+            // Shows the input bar, or a locked banner if the group is
+            // admin-only-send and this user isn't an admin
             canSend
                 ? _GroupInputBar(group: _group, cubit: cubit)
                 : Container(
@@ -178,7 +179,9 @@ class _GroupInputBarState extends State<_GroupInputBar> {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10)))),
         const SizedBox(width: 8),
-        // FIX: wrap in SizedBox to prevent unconstrained layout crash
+        // Fixed-size box keeps layout stable while the send button
+        // cross-fades in — an unconstrained AnimatedSwitcher here would
+        // otherwise crash on layout.
         SizedBox(
           width: 44, height: 44,
           child: AnimatedSwitcher(

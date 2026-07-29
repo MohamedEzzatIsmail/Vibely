@@ -1,12 +1,6 @@
-// lib/services/repositories/notification_repository.dart
-//
-// Wraps every Firestore call that notifications_cubit.dart used to make
-// directly. NotificationsCubit should hold no FirebaseFirestore reference
-// of its own after this — it only calls NotificationRepository methods.
-//
-// Follows the same static-class convention as PostRepository and
-// ChatRepository: no instances, a private constructor, static client,
-// static methods, no business logic — pure pass-through I/O.
+/// All Firestore access for user notifications — reads, writes, and the
+/// real-time notifications stream. Kept as a static-only class so
+/// NotificationsCubit never touches Firestore directly.
 
 import 'dart:async';
 
@@ -20,7 +14,7 @@ class NotificationRepository {
   static CollectionReference<Map<String, dynamic>> _notifs(String uid) =>
       _firestore.collection('Users').doc(uid).collection('notifications');
 
-  // ── Real-time stream ──────────────────────────────────────────────────────
+  /// Live stream of this user's notifications, newest first.
   static StreamSubscription<QuerySnapshot<Map<String, dynamic>>> watchNotifications({
     required String uid,
     required void Function(QuerySnapshot<Map<String, dynamic>> snapshot) onData,
@@ -36,6 +30,8 @@ class NotificationRepository {
   static DocumentReference<Map<String, dynamic>> newNotificationRef(String toUserId) =>
       _notifs(toUserId).doc();
 
+  /// Writes a notification document at [ref]. The recipient is implied by
+  /// which user's sub-collection [ref] belongs to.
   static Future<void> sendNotification({
     required String toUserId,
     required DocumentReference<Map<String, dynamic>> ref,
@@ -49,6 +45,7 @@ class NotificationRepository {
     return _notifs(uid).where('isSeen', isEqualTo: false).get();
   }
 
+  /// Marks every notification in [docs] as seen in a single batched write.
   static Future<void> markAllSeen({
     required String uid,
     required List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,

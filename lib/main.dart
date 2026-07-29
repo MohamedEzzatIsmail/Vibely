@@ -1,12 +1,3 @@
-// lib/main.dart
-//
-// v6 — All 5 features wired:
-//  1. Video player (post_video_player.dart handles it directly)
-//  2. Date separator fix (chat.dart updated)
-//  3. First-launch flow: Splash → Language → Privacy → Notifications
-//  4. Arabic / RTL support via LanguageCubit + MaterialApp locale
-//  5. Light/Dark theme via ThemeCubit + BlocBuilder in MaterialApp
-
 import 'layout/home.dart';
 import 'layout/feeds/post_details_screen.dart';
 import 'layout/legal/legal_screen.dart';
@@ -221,9 +212,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 '/blocked-users':  (_) => const BlockedUsersScreen(),
                 '/terms':          (_) => const LegalScreen(type: LegalType.terms),
                 '/privacy-policy': (_) => const LegalScreen(type: LegalType.privacy),
-                // FIX: search icon in Chats called this route but it was never
-                // registered, causing a crash on tap. Search now lives in
-                // ExploreScreen (see lib/layout/search/search_screen.dart).
+                // Search lives in ExploreScreen — see
+                // lib/layout/search/search_screen.dart.
                 '/search':         (_) => const ExploreScreen(),
               },
             );

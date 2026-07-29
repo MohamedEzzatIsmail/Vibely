@@ -1,5 +1,7 @@
-// lib/layout/cubit/chat/chat_cubit.dart
-// Full implementation — all 26 prompts integrated
+/// State management for 1-to-1 chats and group chats: messages, presence,
+/// typing, reactions, mute/pin/archive, disappearing messages, blocking, and
+/// full group administration. All Firestore/Supabase access goes through
+/// [ChatRepository] — this cubit owns no database clients directly.
 
 import 'dart:async';
 import 'dart:io';
@@ -17,6 +19,9 @@ import '../notifications/notifications_cubit.dart';
 import 'chat_states.dart';
 
 // ─── GroupModel ───────────────────────────────────────────────────────────────
+/// A group chat's metadata document — membership, admin, and the last
+/// message preview shown in the groups list. Message documents themselves
+/// live in a `Messages` sub-collection, not on this model.
 class GroupModel {
   final String  id;
   final String  name;
@@ -124,20 +129,21 @@ class ChatCubit extends Cubit<ChatStates> {
   final Map<String, int>                _streamLimitMap = {};
 
   // ── Listener resilience ────────────────────────────────────────────────────
-  // Every real-time Firestore listener below dies permanently the moment it
-  // hits an error (network blip, transient auth hiccup, etc.) — Flutter/
-  // Firestore don't auto-reconnect a .snapshots() stream on error. Without
-  // this, one bad moment on the network would leave chat silently frozen
-  // until the user backed out of the screen and back in. Every listener now
-  // schedules a reconnect through here instead of just dying.
+  /// Tracks a pending reconnect for each named real-time listener. A
+  /// `.snapshots()` stream does not auto-reconnect after an error, so every
+  /// listener below schedules a retry through here rather than staying dead.
   final Map<String, Timer> _retryTimers = {};
   static const _retryDelay = Duration(seconds: 3);
 
+  /// Cancels any pending retry for [key] and schedules [resubscribe] to run
+  /// after [_retryDelay].
   void _scheduleRetry(String key, void Function() resubscribe) {
     _retryTimers[key]?.cancel();
     _retryTimers[key] = Timer(_retryDelay, resubscribe);
   }
 
+  /// Cancels a pending retry — call this once fresh data arrives, since the
+  /// listener has clearly recovered on its own.
   void _clearRetry(String key) => _retryTimers[key]?.cancel();
 
   void _cancelAllRetries() {
@@ -558,7 +564,8 @@ class ChatCubit extends Cubit<ChatStates> {
 
   bool isMuted(String otherUid) => mutedMap[otherUid] == true;
 
-  // ── Pin (Prompt 22 — persisted to Firestore) ───────────────────────────────
+  // ── Pin — persisted per-user on their own Users doc, not the chat itself ───
+  /// Pins/unpins a conversation to the top of the chats list.
   Future<void> pinConversation(String otherUid, {required bool pin}) async {
     pinnedMap[otherUid] = pin;
     await ChatRepository.setPinned(
@@ -571,7 +578,8 @@ class ChatCubit extends Cubit<ChatStates> {
 
   bool isPinned(String otherUid) => pinnedMap[otherUid] == true;
 
-  // ── Archive (Prompt 15) ────────────────────────────────────────────────────
+  // ── Archive ──────────────────────────────────────────────────────────────
+  /// Archives/unarchives a conversation (hides it from the main chats list).
   Future<void> archiveConversation(String otherUid, {required bool archive}) async {
     archivedMap[otherUid] = archive;
     await ChatRepository.setArchived(
@@ -620,12 +628,16 @@ class ChatCubit extends Cubit<ChatStates> {
         .toList();
   }
 
-  // ── Disappearing messages (Prompt 23) ─────────────────────────────────────
+  // ── Disappearing messages ────────────────────────────────────────────────
+  /// Sets (or clears, if [days] is null) an auto-expiry window for this
+  /// chat. Expiry is enforced client-side by the message stream filter, not
+  /// server-side — old messages still exist in Firestore, they're just
+  /// filtered out of what's shown once they're past the cutoff.
   Future<void> setDisappearingMessages({required String receiverId, int? days}) async {
     final chatId = _getChatId(receiverId);
     _disappearDaysMap[chatId] = days;
     await ChatRepository.setDisappearingMessages(chatId: chatId, days: days);
-    // Re-trigger stream to filter
+    // Re-subscribe so the stream immediately re-applies the new cutoff.
     _startRealtimeStream(receiverId, limit: _streamLimitMap[receiverId] ?? 20);
     emit(ChatDisappearingMsgState());
   }
@@ -668,7 +680,10 @@ class ChatCubit extends Cubit<ChatStates> {
     return chatId;
   }
 
-  // ── Block & report (Prompt 18) ─────────────────────────────────────────────
+  // ── Block & report ───────────────────────────────────────────────────────
+  /// Blocks a user: removes them from the conversations list, records the
+  /// block on both sides (so blocked-by can be checked from either user's
+  /// doc), and sends them a notification so being blocked isn't silent.
   Future<void> blockUser(String targetUid) async {
     final myUid = currentUser!.uid!;
     await ChatRepository.blockUser(myUid: myUid, targetUid: targetUid);
@@ -738,7 +753,7 @@ class ChatCubit extends Cubit<ChatStates> {
     } catch (e) { emit(ChatErrorState(e.toString())); return ''; }
   }
 
-  // Prompt 24 — real-time group listener
+  /// Live listener for the groups this user belongs to.
   void listenGroups() {
     if (currentUser?.uid == null) return;
     _groupsListener?.cancel();
@@ -757,7 +772,7 @@ class ChatCubit extends Cubit<ChatStates> {
     );
   }
 
-  // Keep loadGroups as one-shot fallback
+  /// One-shot fetch of groups, used where a live listener isn't needed.
   Future<void> loadGroups() async {
     if (currentUser?.uid == null) return;
     final snap = await ChatRepository.fetchGroups(currentUser!.uid!);
@@ -900,7 +915,7 @@ class ChatCubit extends Cubit<ChatStates> {
     } catch (e) { emit(ChatErrorState(e.toString())); }
   }
 
-  // Prompt 7 — add/remove members, change admin
+  // ── Group membership & admin ─────────────────────────────────────────────
   Future<void> addGroupMember({required String groupId, required String newMemberUid}) async {
     await ChatRepository.addGroupMember(groupId: groupId, newMemberUid: newMemberUid);
     emit(ChatGroupMemberAddedState());
@@ -916,7 +931,10 @@ class ChatCubit extends Cubit<ChatStates> {
     emit(ChatGroupUpdatedState());
   }
 
-  // Prompt 8 — leave group
+  /// Removes the current user from the group and posts a system message
+  /// announcing it. The system message failing is treated as non-critical —
+  /// the user has already left either way, so a notification hiccup
+  /// shouldn't block the rest of the leave flow.
   Future<void> leaveGroup(String groupId) async {
     final myUid = currentUser!.uid!;
     await ChatRepository.leaveGroup(groupId: groupId, myUid: myUid);
@@ -930,23 +948,21 @@ class ChatCubit extends Cubit<ChatStates> {
         },
       );
     } catch (e) {
-      // Non-critical: the user has already left the group above. Don't let
-      // a failure to post the "X left the group" system message stop the
-      // rest of this flow (local state update + emitting the success state).
       if (kDebugMode) debugPrint('[ChatCubit] leaveGroup system message failed: $e');
     }
     groups.removeWhere((g) => g.id == groupId);
     emit(ChatGroupLeftState());
   }
 
-  // Prompt 9 — delete group (admin)
+  /// Deletes a group and all its messages. Admin-only — enforced by the
+  /// Firestore rules, not checked here.
   Future<void> deleteGroup(String groupId) async {
     await ChatRepository.deleteGroup(groupId);
     groups.removeWhere((g) => g.id == groupId);
     emit(ChatGroupDeletedState());
   }
 
-  // Prompt 10 — update group name / photo
+  // ── Group name / photo ───────────────────────────────────────────────────
   Future<void> updateGroupName({required String groupId, required String newName}) async {
     await ChatRepository.updateGroupName(groupId: groupId, newName: newName);
     final idx = groups.indexWhere((g) => g.id == groupId);
@@ -964,7 +980,8 @@ class ChatCubit extends Cubit<ChatStates> {
     emit(ChatGroupUpdatedState());
   }
 
-  // Prompt 11 — admin-only messaging
+  /// Restricts sending in this group to admins only (or lifts the
+  /// restriction). Enforced by the Firestore rules; this just sets the flag.
   Future<void> setGroupOnlyAdmins({required String groupId, required bool onlyAdmins}) async {
     await ChatRepository.setGroupOnlyAdmins(groupId: groupId, onlyAdmins: onlyAdmins);
     emit(ChatGroupUpdatedState());
@@ -1000,13 +1017,15 @@ class ChatCubit extends Cubit<ChatStates> {
     emit(ChatUsersLoadedState());
   }
 
+  /// Watches for the chat preview shown in the conversations list. Fetches
+  /// the most recent 20 messages (not just 1) so it can skip over any that
+  /// are deleted or hidden-for-me and fall back to the newest one actually
+  /// visible to this user.
   void _listenLastMessage(String userId) {
     final chatId  = _getChatId(userId);
     final myUid   = currentUser?.uid ?? '';
     _lastMsgSubs[userId]?.cancel();
     final key = 'lastMsg_$userId';
-    // FIX: fetch more than 1 so we can skip deleted/hidden messages and fall
-    // back to the most-recent visible one (up to 20 candidates is plenty).
     _lastMsgSubs[userId] = ChatRepository.watchLastMessage(
       chatId: chatId,
       onData: (snap) {

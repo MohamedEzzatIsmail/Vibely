@@ -1,5 +1,7 @@
-// lib/layout/chats/chats_screen.dart
-// Prompt 15 — archive, Prompt 16 — unread filter, Prompt 24 — real-time groups
+/// The Chats tab: conversation list, groups list, and the entry point into
+/// both 1-to-1 and group chat screens. Split across `part` files
+/// (groups_tab_widgets, group_chat_screen, chat_sheets_widgets) since they
+/// share this screen's state.
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -32,9 +34,9 @@ class _ChatsScreenState extends State<ChatsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabs;
 
-  // FIX: _showOnlyUnread lives HERE (parent State), not inside _ChatsTab.
-  // When it was in _ChatsTabState, every cubit emit rebuilt BlocBuilder which
-  // recreated _ChatsTabState and reset the bool to false — trapping the user.
+  // Deliberately kept in this parent State rather than in _ChatsTabState:
+  // _ChatsTab rebuilds on every cubit emit (via BlocBuilder), which would
+  // otherwise reset this flag to false on every single chat update.
   bool _showOnlyUnread = false;
 
   @override
@@ -55,7 +57,6 @@ class _ChatsScreenState extends State<ChatsScreen>
     final cubit = ChatCubit.get(ctx);
     cubit.setCurrentUser(UserModel.fromJson(doc.data()!));
     cubit.setContext(ctx);
-    // Prompt 24 — real-time group listener
     await cubit.loadUsers();
     cubit.listenGroups();
   }
@@ -149,7 +150,7 @@ class _ChatsScreenState extends State<ChatsScreen>
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  CHATS TAB — Prompt 15 (archive) + Prompt 16 (unread filter)
+//  CHATS TAB — conversation list with archive and unread filtering
 // ══════════════════════════════════════════════════════════════════════════════
 class _ChatsTab extends StatelessWidget {
   final Future<void> Function() onRefresh;
@@ -192,9 +193,10 @@ class _ChatsTab extends StatelessWidget {
           onRefresh: onRefresh,
           color: kGold,
           backgroundColor: c.surface,
-          // FIX: chips are ALWAYS rendered — they no longer live inside
-          // the displayUsers.isEmpty branch that caused them to vanish
-          // when the "Unread" filter returned 0 results.
+          // The filter chips render unconditionally, outside the
+          // displayUsers-empty branch below — so they stay visible even
+          // when the "Unread" filter has zero matches, instead of the
+          // filter UI itself disappearing along with the empty list.
           child: ListView(children: [
             // ── Filter chips — always shown once chats exist ──────────
             if (activeUsers.isNotEmpty || archivedUsers.isNotEmpty)

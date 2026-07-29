@@ -54,7 +54,8 @@ class _GroupsTab extends StatelessWidget {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  CHAT TILE with Prompt 15 archive + existing mute/pin/delete
+//  CHAT TILE — a single conversation row: avatar, preview, mute/pin/archive/
+//  delete swipe actions, unread badge
 // ══════════════════════════════════════════════════════════════════════════════
 class _ChatTile extends StatelessWidget {
   final UserModel user;

@@ -1,5 +1,5 @@
-// lib/layout/chats/group_info_screen.dart
-// Prompts 6, 7, 8, 9, 10, 11 — full group management
+/// Group settings screen: rename, change photo, admin-only-send toggle,
+/// member list with add/remove/promote, leave group, and delete group.
 
 import 'dart:io';
 import '../../share/style/app_colors.dart';
@@ -330,7 +330,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
 
           const SizedBox(height: 8),
 
-          // ── Admin-only toggle (Prompt 11) ──────────────────────────────────
+          // ── Admin-only send toggle ────────────────────────────────────────
           if (_isAdmin)
             Container(
               color: AppColors.of(context).surface,

@@ -1,14 +1,7 @@
-// lib/services/repositories/chat_repository.dart
-//
-// Wraps every Firestore + Supabase call that chat_cubit.dart used to make
-// directly. ChatCubit should hold no FirebaseFirestore/SupabaseClient
-// references of its own after this — it only calls ChatRepository methods.
-//
-// Follows the same static-class convention as PostRepository and
-// NotificationService: no instances, a private constructor, static clients,
-// static methods. Every method here is a thin pass-through — no business
-// logic, no state mutation — so ChatCubit keeps owning all of that exactly
-// as it did before.
+/// All Firestore + Supabase access for 1-to-1 chats and group chats —
+/// messages, presence, reactions, mute/pin/archive, disappearing messages,
+/// blocking/reporting, and full group management. Kept as a static-only
+/// class so ChatCubit never touches Firestore/Supabase directly.
 
 import 'dart:async';
 import 'dart:io';
@@ -53,6 +46,9 @@ class ChatRepository {
     return _chats.doc(chatId).get();
   }
 
+  /// Creates the Chat document if it doesn't exist yet (merge write, so it's
+  /// safe to call even if it already does). `participants` is the array the
+  /// security rules check to authorize access to this chat and its messages.
   static Future<void> ensureChatDoc({
     required String chatId,
     required List<String> participants,
@@ -79,8 +75,10 @@ class ChatRepository {
         .listen(onData, onError: onError);
   }
 
-  // ── Send (1-to-1) — generic batched send used by text/image/video/voice/
-  //    forward/shared-post/reply, since they all do the same two writes ──────
+  /// Sends one message and updates the parent chat's preview metadata
+  /// (last message, sender, timestamp) in a single batched write. Used for
+  /// text, image, video, voice, forwarded, shared-post, and reply messages
+  /// alike, since they all need the same two writes.
   static Future<void> sendMessage({
     required String chatId,
     required Map<String, dynamic> messageData,
@@ -231,6 +229,11 @@ class ChatRepository {
   }
 
   // ── Reactions (1-to-1) ───────────────────────────────────────────────────
+  /// Toggles [myUid]'s reaction to [emoji] on a message. Each user can only
+  /// have one active reaction per message, so any of their other reactions
+  /// are removed first. Runs as a transaction since it reads-then-writes the
+  /// existing reactions map and concurrent reactions from other users must
+  /// not clobber each other.
   static Future<void> toggleReaction({
     required String chatId,
     required String messageId,
@@ -541,6 +544,10 @@ class ChatRepository {
         .listen(onData, onError: onError);
   }
 
+  /// Streams every message addressed to [myUid] in this chat; the cubit
+  /// filters by `seen == false` client-side to get the unread count, since a
+  /// direct `where('seen', isEqualTo: false)` listener would need its own
+  /// composite index and this collection is small per-chat anyway.
   static StreamSubscription<QuerySnapshot<Map<String, dynamic>>> watchUnread({
     required String chatId,
     required String myUid,
@@ -556,6 +563,9 @@ class ChatRepository {
   }
 
   // ── Typing ────────────────────────────────────────────────────────────────
+  /// Watches the Chat document itself, not a sub-collection — typing state
+  /// (`typingUserId`) lives directly on the chat doc rather than its own
+  /// collection, since it's transient, single-value, per-chat state.
   static StreamSubscription<DocumentSnapshot<Map<String, dynamic>>> watchTyping({
     required String chatId,
     required void Function(DocumentSnapshot<Map<String, dynamic>> doc) onData,

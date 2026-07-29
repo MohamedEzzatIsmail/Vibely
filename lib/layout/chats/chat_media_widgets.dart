@@ -257,7 +257,7 @@ class _ReplyQuote extends StatelessWidget {
   );
 }
 
-// ── Full-screen image viewer (Prompt 13) ─────────────────────────────────────
+// ── Full-screen image viewer ──────────────────────────────────────────────────
 class _InlineImage extends StatelessWidget {
   final String imageUrl; final String? caption;
   const _InlineImage({required this.imageUrl, this.caption});

@@ -46,10 +46,7 @@ service cloud.firestore {
         // (e.g. "X liked your post"), but it must honestly claim to be from
         // the caller and be one of the known types — otherwise anyone could
         // forge a notification appearing to be from an arbitrary other user.
-        //
-        // CORRECTION: added 'blocked' — the block-notification feature
-        // (ChatCubit.blockUser) sends this type, and without it here every
-        // one of those writes was rejected by these rules.
+        // Includes 'blocked', since ChatCubit.blockUser sends one of these.
         allow create: if isAuth()
                       && request.resource.data.fromUserId == request.auth.uid
                       && request.resource.data.type in
@@ -109,15 +106,8 @@ service cloud.firestore {
     // Chat document ID = sorted(uid1, uid2).join('_'), but the document's
     // FIELDS store the pair as `participants: [uidA, uidB]` — see
     // ChatRepository.sendMessage() / ensureChatDoc(). There is no uid1/uid2
-    // field on the document at all.
-    //
-    // CORRECTION (the actual "chat doesn't send or receive anything" bug):
-    // these rules previously checked resource.data.uid1 / uid2, fields that
-    // never exist on any Chat document written by the app. Every comparison
-    // silently evaluated against `null`, so `null == request.auth.uid` was
-    // always false — every single Chats/Messages read and write was
-    // permission-denied, unconditionally, for every user. Fixed by checking
-    // the `participants` array that the code actually writes.
+    // field on the document itself, so membership checks below key off
+    // `participants` instead.
     match /Chats/{chatId} {
       // Safe to use ONLY directly inside this /Chats/{chatId} match block,
       // where `resource` correctly refers to the Chat document.
@@ -157,9 +147,7 @@ service cloud.firestore {
     // ── Group chats ────────────────────────────────────────────────────────
     // GroupModel.toMap() writes the member list as `members` — see
     // chat_cubit.dart's GroupModel — there is no `memberUids` field on the
-    // document. Same class of bug as Chats/Messages above: every check here
-    // previously referenced a field that never existed, so group creation,
-    // reads, updates, and messaging were all unconditionally denied.
+    // document, so membership checks below key off `members` instead.
     match /Groups/{groupId} {
       // Safe to use ONLY directly inside this /Groups/{groupId} match block.
       function isMember() {

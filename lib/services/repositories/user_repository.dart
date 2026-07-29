@@ -1,13 +1,6 @@
-// lib/services/repositories/user_repository.dart
-//
-// Wraps every Firestore + Supabase call that cubit.dart (MainCubit) used to
-// make directly for user-profile data. MainCubit should hold no
-// FirebaseFirestore/SupabaseClient references of its own after this — it
-// only calls UserRepository methods (and AuthService for auth state).
-//
-// Follows the same static-class convention as the other repositories:
-// no instances, a private constructor, static clients, static methods,
-// no business logic — pure pass-through I/O.
+/// All Firestore + Supabase access for user-profile data (reads, profile
+/// updates, image uploads, account deletion). Kept as a static-only class so
+/// MainCubit never touches Firestore/Supabase directly for this data.
 
 import 'dart:typed_data';
 
@@ -24,17 +17,21 @@ class UserRepository {
       _firestore.collection('Users').doc(uid);
 
   // ── Read ──────────────────────────────────────────────────────────────────
+  /// Fetches a single user's Firestore document.
   static Future<DocumentSnapshot<Map<String, dynamic>>> getUser(String uid) {
     return _userDoc(uid).get();
   }
 
   // ── Write ─────────────────────────────────────────────────────────────────
+  /// Makes sure the user document has its own `uid` field set (some flows
+  /// create the doc before this is known). Safe to call repeatedly.
   static Future<void> ensureUidField({
     required String uid,
   }) async {
     await _userDoc(uid).set({'uid': uid}, SetOptions(merge: true));
   }
 
+  /// Merges [data] into the user's profile document.
   static Future<void> updateProfile({
     required String uid,
     required Map<String, dynamic> data,
@@ -42,6 +39,7 @@ class UserRepository {
     await _userDoc(uid).set(data, SetOptions(merge: true));
   }
 
+  /// Stores the device's current FCM push token on the user document.
   static Future<void> updateFcmToken({
     required String uid,
     required String token,
@@ -60,6 +58,8 @@ class UserRepository {
   }
 
   // ── Profile / cover image upload ─────────────────────────────────────────
+  /// Uploads a new profile photo to Supabase Storage and returns its public
+  /// URL. Does not write the URL to Firestore — call [updateProfile] with it.
   static Future<String> uploadProfileImage({
     required String uid,
     required Uint8List bytes,
@@ -74,6 +74,8 @@ class UserRepository {
     return _supabase.storage.from('user-images').getPublicUrl(fileName);
   }
 
+  /// Uploads a new cover photo to Supabase Storage and returns its public
+  /// URL. Does not write the URL to Firestore — call [updateProfile] with it.
   static Future<String> uploadCoverImage({
     required String uid,
     required Uint8List bytes,

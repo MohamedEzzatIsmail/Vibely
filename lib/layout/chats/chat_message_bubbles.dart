@@ -1,5 +1,6 @@
 part of 'chat.dart';
 
+/// A message bubble sent by the current user (right-aligned, gold gradient).
 class _MyBubble extends StatelessWidget {
   final MessageModel msg;
   final String       docId;
@@ -23,7 +24,8 @@ class _MyBubble extends StatelessWidget {
             child: Container(
               constraints: BoxConstraints(
                   maxWidth: MediaQuery.of(context).size.width * 0.72),
-              // FIX: deleted messages show a proper muted bubble, not transparent
+              // Deleted messages get a muted solid-dark bubble instead of
+              // the normal gradient, so they read as visually distinct.
               decoration: BoxDecoration(
                 gradient: msg.isDeleted ? null : const LinearGradient(
                     colors: [Color(0xFFE5C687), Color(0xFFB8964A)],
@@ -55,6 +57,7 @@ class _MyBubble extends StatelessWidget {
   }
 }
 
+/// A message bubble from the other participant (left-aligned, light/white).
 class _OtherBubble extends StatelessWidget {
   final MessageModel msg;
   final String       docId;
@@ -78,7 +81,6 @@ class _OtherBubble extends StatelessWidget {
             child: Container(
               constraints: BoxConstraints(
                   maxWidth: MediaQuery.of(context).size.width * 0.72),
-              // FIX: deleted messages show a proper muted bubble, not transparent
               decoration: BoxDecoration(
                 gradient: msg.isDeleted ? null : const LinearGradient(
                     colors: [Color(0xFFFFFFFF), Color(0xFFE8E8E8)],
@@ -110,6 +112,9 @@ class _OtherBubble extends StatelessWidget {
 // ══════════════════════════════════════════════════════════════════════════════
 //  MESSAGE CONTENT
 // ══════════════════════════════════════════════════════════════════════════════
+/// The actual content inside a bubble: sender name (for groups), forwarded
+/// tag, reply quote, shared post, media, text, and the timestamp/seen row.
+/// Shared between [_MyBubble] and [_OtherBubble] via the [isMe] flag.
 class _MsgContent extends StatelessWidget {
   final MessageModel msg;
   final bool         isMe;
@@ -119,7 +124,8 @@ class _MsgContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (msg.isDeleted) {
-      // FIX: bubble bg is now dark (0xFF1C2128) so use white-toned text
+      // Deleted-message bubble is dark, so this needs light-toned text
+      // rather than the dark text the normal bubble content uses.
       return Padding(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             Icon(Icons.block_rounded, size: 13, color: AppColors.of(context).textHint),
@@ -141,7 +147,8 @@ class _MsgContent extends StatelessWidget {
       child: Column(
         crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
-          // Group sender name (Prompt 5)
+          // Sender's name, shown only in group chats and only on their
+          // messages (not your own, in the mirrored right-aligned bubble)
           if (msg.isGroupMsg == true && !isMe) ...[
             Text(
               cubit.users.firstWhereOrNull((u) => u.uid == msg.senderId)?.name ?? 'Unknown',
@@ -163,10 +170,9 @@ class _MsgContent extends StatelessWidget {
           ],
           if (msg.hasReply) _ReplyQuote(msg: msg, isMe: isMe),
           if (msg.isSharedPost) _SharedPostCard(msg: msg, isMe: isMe),
-          // Image (Prompt 13 — full-screen viewer)
+          // Tapping the image opens a full-screen viewer
           if (msg.hasImage) _InlineImage(imageUrl: msg.imageUrl!, caption: msg.text),
           if (msg.hasVideo) _InlineVideoPlayer(videoUrl: msg.videoUrl!),
-          // Voice player (Prompt 2 — now using isolated widget)
           if (msg.hasAudio)
             VoiceMessagePlayer(
               audioUrl:     msg.audioUrl!,

@@ -1,11 +1,7 @@
-// lib/services/repositories/post_repository.dart
-//
-// Wraps every Firestore + Supabase call that post_cubit.dart used to make
-// directly. PostsCubit should hold no FirebaseFirestore/Supabase references
-// of its own after this — it only calls PostRepository methods.
-//
-// Follows the same static-class convention as NotificationService:
-// no instances, a private constructor, static clients, static methods.
+/// All Firestore + Supabase access for posts — the feed, creating/editing/
+/// deleting posts, bookmarks, reactions, and the comment/reply threads
+/// nested under each post. Kept as a static-only class so PostsCubit never
+/// touches Firestore/Supabase directly.
 
 import 'dart:async';
 import 'dart:io';
@@ -35,8 +31,8 @@ class PostRepository {
   }
 
   // ── Feed — first page with real-time listener ───────────────────────────
-  // Returns the subscription so the cubit can cancel it on logout/refresh,
-  // exactly as it did when it owned the Firestore call directly.
+  /// Live feed listener, newest posts first. Returns the subscription so the
+  /// cubit can cancel it on logout/refresh.
   static StreamSubscription<QuerySnapshot<Map<String, dynamic>>> watchFeed({
     required int pageSize,
     required void Function(QuerySnapshot<Map<String, dynamic>> snapshot) onData,
@@ -50,6 +46,8 @@ class PostRepository {
   }
 
   // ── Load more posts (cursor-based, one-time fetch) ──────────────────────
+  /// One-time fetch of the next page of posts after [lastDoc], for
+  /// infinite-scroll pagination (not a live listener).
   static Future<QuerySnapshot<Map<String, dynamic>>> fetchMorePosts({
     required DocumentSnapshot lastDoc,
     required int pageSize,
@@ -83,6 +81,9 @@ class PostRepository {
     return _supabase.storage.from('user-images').getPublicUrl(fn);
   }
 
+  /// Generates a JPEG thumbnail for a video and uploads it to Supabase.
+  /// Returns `null` (rather than throwing) if generation or upload fails,
+  /// since a missing thumbnail shouldn't block the whole post from posting.
   static Future<String?> generateAndUploadThumbnail(File videoFile) async {
     try {
       final tempDir = await getTemporaryDirectory();
@@ -175,6 +176,9 @@ class PostRepository {
   }
 
   // ── Reactions ─────────────────────────────────────────────────────────────
+  /// Applies a pre-computed reaction diff (like/dislike counts and the
+  /// per-user reactions map) to a post — the cubit computes [update] since
+  /// the actual reaction logic depends on the user's current reaction.
   static Future<void> applyReactionUpdate({
     required String postId,
     required Map<String, dynamic> update,
