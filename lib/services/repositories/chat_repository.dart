@@ -92,6 +92,21 @@ class ChatRepository {
     required String? lastSenderId,
   }) async {
     final chatRef = _chats.doc(chatId);
+
+    // Must happen as its OWN write, before the batch below — not merged
+    // into it. The Messages rule's isChatParticipant() does a get() on this
+    // Chat doc, and within a single batch a get() can't see another write
+    // from that same batch before it commits. If the chat doc didn't exist
+    // yet, the message-create batch would see "no chat doc" and deny the
+    // whole batch — which also meant the chat doc itself never got created,
+    // breaking the conversation for both people from that point on. Doing
+    // this first (and it's a no-op merge if the doc already exists) means
+    // the batch below always sees an existing parent doc.
+    await ensureChatDoc(
+      chatId: chatId,
+      participants: participants.whereType<String>().toList(),
+    );
+
     final batch = _firestore.batch();
     batch.set(chatRef.collection('Messages').doc(), messageData);
     batch.set(chatRef, {

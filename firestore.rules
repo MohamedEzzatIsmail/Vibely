@@ -97,10 +97,22 @@ service cloud.firestore {
       // Create: authenticated, and uid field must match caller.
       allow create: if isAuth() && request.resource.data.uid == request.auth.uid;
 
-      // Update/delete: post owner only. The `uid` field is locked so an
-      // owner can't reassign authorship of the post to someone else.
-      allow update: if isMine(resource.data.uid)
-                    && request.resource.data.uid == resource.data.uid;
+      // Update/delete: the owner can change anything (except reassigning
+      // authorship — the `uid` field is locked). Any other authenticated
+      // user may ALSO update, but only interaction-count fields —
+      // reactionCounts/userReactions/likes (PostsCubit.reactToPost),
+      // bookmarkCount (PostRepository.setBookmarked), and commentsCount
+      // (PostRepository.addComment/deleteComment) — never the post's own
+      // content. Without this, reacting to or bookmarking someone else's
+      // post was silently permission-denied: the optimistic UI update
+      // showed it locally, then reverted the moment the next feed snapshot
+      // refreshed from the server, where nothing had actually changed.
+      allow update: if (isMine(resource.data.uid)
+                        && request.resource.data.uid == resource.data.uid)
+                     || (isAuth() && request.resource.data.diff(resource.data)
+                            .affectedKeys().hasOnly(
+                                ['reactionCounts', 'userReactions', 'likes',
+                                 'bookmarkCount', 'commentsCount']));
       allow delete: if isMine(resource.data.uid);
 
       // ── Comments sub-collection ──────────────────────────────────────────

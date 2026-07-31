@@ -132,8 +132,18 @@ module.exports = async (req, res) => {
 
   try {
     const db = admin.firestore();
-    const userSnap = await db.collection("Users").doc(toUserId).get();
-    const token = userSnap.data()?.fcmToken;
+    // fcmToken moved to Users/{uid}/private/data as part of the privacy
+    // split (email/phone/block-lists/etc. are no longer on the public
+    // doc) — reading the old path here always found nothing, so every
+    // push silently no-op'd as "recipient has no fcmToken" regardless of
+    // whether the recipient actually had one.
+    const privateSnap = await db
+      .collection("Users")
+      .doc(toUserId)
+      .collection("private")
+      .doc("data")
+      .get();
+    const token = privateSnap.data()?.fcmToken;
     if (!token) {
       res.status(200).json({ skipped: "recipient has no fcmToken" });
       return;
@@ -174,6 +184,8 @@ module.exports = async (req, res) => {
         .firestore()
         .collection("Users")
         .doc(toUserId)
+        .collection("private")
+        .doc("data")
         .update({ fcmToken: admin.firestore.FieldValue.delete() });
       res.status(200).json({ skipped: "stale token cleared" });
       return;

@@ -289,7 +289,20 @@ class _Header extends StatelessWidget {
             style: OutlinedButton.styleFrom(side: const BorderSide(color: Color(0xFF30363d)),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 padding: const EdgeInsets.symmetric(vertical: 10)),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(user: user))),
+            onPressed: () async {
+              // Without this, the Chat document doesn't exist yet when the
+              // first message is sent — its create-write and the very first
+              // Message doc's create-write land in the same batch, and the
+              // Messages rule's isChatParticipant() can't see a sibling
+              // write's result, so it evaluates against a chat that (as far
+              // as the rule can tell) doesn't exist — permission-denied.
+              // ensureChat() creates the Chat doc as its own earlier write,
+              // so it already exists by the time a message is sent.
+              await ChatCubit.get(context).ensureChat(user.uid!);
+              if (context.mounted) {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(user: user)));
+              }
+            },
             child: Text(AppStrings.of(context).messageLabel, style: TextStyle(color: AppColors.of(context).text, fontWeight: FontWeight.w600, fontSize: 14)),
           )),
         ]),
