@@ -15,6 +15,7 @@ import '../cubit/post/post_cubit.dart';
 import '../cubit/post/post_states.dart';
 import '../feeds/share_post_sheet.dart';
 import '../notifications/post_navigation_controller.dart';
+import '../report/report_sheet.dart';
 
 part 'post_card_widgets.dart';
 part 'post_media_widgets.dart';

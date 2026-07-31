@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../share/style/app_colors.dart';
 import '../../share/local/app_strings.dart';
+import '../report/report_sheet.dart';
 
 class CommentsBottomSheet extends StatefulWidget {
   final PostModel post;
@@ -132,7 +133,8 @@ class _CommentsBottomSheetState
                                   color: AppColors.of(context).textSub),
                             ),
 
-                            /// DELETE BUTTON
+                            /// DELETE (own comment or post owner moderating)
+                            /// / REPORT (someone else's comment)
                             trailing: isOwner
                                 ? IconButton(
                               icon: const Icon(
@@ -147,7 +149,19 @@ class _CommentsBottomSheetState
                                 );
                               },
                             )
-                                : null,
+                                : IconButton(
+                              icon: const Icon(
+                                Icons.flag_outlined,
+                                color: Colors.orangeAccent,
+                                size: 20,
+                              ),
+                              onPressed: () {
+                                ReportSheet.show(context,
+                                    targetUid: comment['userId'] ?? '',
+                                    targetType: 'comment',
+                                    postId: widget.post.postId);
+                              },
+                            ),
                           ),
 
                           /// REACTIONS + REPLY

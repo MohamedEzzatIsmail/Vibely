@@ -16,6 +16,7 @@ import '../../layout/chats/group_info_screen.dart';
 import '../../layout/cubit/chat/chat_cubit.dart';
 import '../../layout/cubit/chat/chat_states.dart';
 import '../../models/user_model.dart';
+import '../../services/repositories/user_repository.dart';
 import '../../share/local/constants.dart';
 import '../../share/style/app_colors.dart';
 import 'voice_recorder_button.dart';
@@ -54,8 +55,9 @@ class _ChatsScreenState extends State<ChatsScreen>
     if (fbUser == null) return;
     final doc = await FirebaseFirestore.instance.collection('Users').doc(fbUser.uid).get();
     if (!doc.exists || !ctx.mounted) return;
+    final userModel = await UserRepository.getFullUserModel(fbUser.uid);
     final cubit = ChatCubit.get(ctx);
-    cubit.setCurrentUser(UserModel.fromJson(doc.data()!));
+    cubit.setCurrentUser(userModel);
     cubit.setContext(ctx);
     await cubit.loadUsers();
     cubit.listenGroups();

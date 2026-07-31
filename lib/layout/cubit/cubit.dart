@@ -30,6 +30,9 @@ class MainCubit extends Cubit<MainStates> {
   String? get uID => AuthService.instance.currentUid;
 
   // ── User data ─────────────────────────────────────────────────────────────
+  /// Loads the CURRENT user's own profile — public + private data merged.
+  /// Never call this to view someone else's profile (see
+  /// other_profile_screen.dart, which reads the public doc directly).
   Future<void> getUserData(String? uid) async {
     if (uid == null || uid.isEmpty) {
       emit(MainGetUserDataErrorStates('UID is null'));
@@ -53,7 +56,7 @@ class MainCubit extends Cubit<MainStates> {
         data['uid'] = uid;
       }
 
-      model = UserModel.fromJson(data);
+      model = await UserRepository.getFullUserModel(uid);
       emit(MainGetUserDataSuccessStates());
     } catch (e) {
       emit(MainGetUserDataErrorStates(e.toString()));
@@ -81,13 +84,17 @@ class MainCubit extends Cubit<MainStates> {
       final Map<String, dynamic> updateData = {
         'name': name,
         'bio': bio,
-        'phone': phone,
+        // Mirrors the private doc's real phone, but nulled out if the user
+        // has chosen to hide it — see UserModel.toMap's doc comment.
+        'phone': model!.hidePhone ? null : phone,
       };
 
       if (imageUrl != null) updateData['image'] = imageUrl;
       if (coverUrl != null) updateData['cover'] = coverUrl;
 
       await UserRepository.updateProfile(uid: uid, data: updateData);
+      await UserRepository.updatePrivateData(
+          uid: uid, data: {'realPhone': phone});
 
       if (password != null && password.isNotEmpty) {
         // Re-authenticate before changing password (Firebase requirement)
@@ -285,8 +292,7 @@ class MainCubit extends Cubit<MainStates> {
   Future<void> initChatUser(BuildContext context) async {
     final firebaseUser = AuthService.instance.currentUser;
     if (firebaseUser == null) return;
-    final doc = await UserRepository.getUser(firebaseUser.uid);
-    final userModel = UserModel.fromJson(doc.data()!);
+    final userModel = await UserRepository.getFullUserModel(firebaseUser.uid);
     final cubit = ChatCubit.get(context);
     cubit.setCurrentUser(userModel);
     cubit.loadUsers();
@@ -298,7 +304,7 @@ class MainCubit extends Cubit<MainStates> {
     final token = await FCMService.getValidToken();
     if (token == null) return;
     try {
-      final doc = await UserRepository.getUser(uID!);
+      final doc = await UserRepository.getPrivateData(uID!);
       final currentToken = doc.data()?['fcmToken'];
       if (currentToken == token) return;
       await UserRepository.updateFcmToken(uid: uID!, token: token);

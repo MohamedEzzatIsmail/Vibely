@@ -22,6 +22,11 @@ class ChatRepository {
   static CollectionReference<Map<String, dynamic>> get _groups =>
       _firestore.collection('Groups');
 
+  /// `Users/{uid}/private/data` — block lists and pinned chats live here,
+  /// not on the public Users doc. See UserRepository for the full rationale.
+  static DocumentReference<Map<String, dynamic>> _privateUserDoc(String uid) =>
+      _users.doc(uid).collection('private').doc('data');
+
   // ── Presence ─────────────────────────────────────────────────────────────
   static StreamSubscription<DocumentSnapshot<Map<String, dynamic>>> watchUser(
     String uid,
@@ -282,11 +287,11 @@ class ChatRepository {
     required String otherUid,
     required bool pin,
   }) async {
-    await _users.doc(myUid).update({
+    await _privateUserDoc(myUid).set({
       'pinnedChats': pin
           ? FieldValue.arrayUnion([otherUid])
           : FieldValue.arrayRemove([otherUid]),
-    });
+    }, SetOptions(merge: true));
   }
 
   static Future<void> setArchived({
@@ -334,16 +339,17 @@ class ChatRepository {
     required String targetUid,
   }) async {
     final batch = _firestore.batch();
-    batch.update(_users.doc(myUid), {
-      'blockedUids': FieldValue.arrayUnion([targetUid]),
-    });
+    batch.set(
+      _privateUserDoc(myUid),
+      {'blockedUids': FieldValue.arrayUnion([targetUid])},
+      SetOptions(merge: true),
+    );
     // Denormalized reverse index so the blocked user can cheaply know they
     // were blocked (from their own doc) without reading the blocker's doc.
+    // Allowed cross-user by a narrow rule exception — see firestore.rules.
     batch.set(
-      _users.doc(targetUid),
-      {
-        'blockedByUids': FieldValue.arrayUnion([myUid]),
-      },
+      _privateUserDoc(targetUid),
+      {'blockedByUids': FieldValue.arrayUnion([myUid])},
       SetOptions(merge: true),
     );
     await batch.commit();
@@ -354,14 +360,14 @@ class ChatRepository {
     required String targetUid,
   }) async {
     final batch = _firestore.batch();
-    batch.update(_users.doc(myUid), {
-      'blockedUids': FieldValue.arrayRemove([targetUid]),
-    });
     batch.set(
-      _users.doc(targetUid),
-      {
-        'blockedByUids': FieldValue.arrayRemove([myUid]),
-      },
+      _privateUserDoc(myUid),
+      {'blockedUids': FieldValue.arrayRemove([targetUid])},
+      SetOptions(merge: true),
+    );
+    batch.set(
+      _privateUserDoc(targetUid),
+      {'blockedByUids': FieldValue.arrayRemove([myUid])},
       SetOptions(merge: true),
     );
     await batch.commit();

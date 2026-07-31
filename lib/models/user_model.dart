@@ -123,19 +123,65 @@ class UserModel {
         closeFriendsUids     = List<String>.from(json['closeFriendsUids']   ?? []),
         pinnedChats          = List<String>.from(json['pinnedChats']        ?? []);  // NEW
 
+  /// Fills in the fields that live in `Users/{uid}/private/data` instead of
+  /// the main public document — real email/phone (overwriting whatever
+  /// public-mirror value was already set by [fromJson]), block lists,
+  /// bookmarks, pinned chats, and close friends. Call
+  /// this only when merging in your OWN private data — never for a model
+  /// built from another user's document, since they have no private doc
+  /// you're allowed to read.
+  void mergePrivateData(Map<String, dynamic> json) {
+    email                = (json['realEmail'] as String?) ?? email;
+    phone                = (json['realPhone'] as String?) ?? phone;
+    emailVerified        = (json['emailVerified'] as bool?) ?? emailVerified;
+    bookmarkedPostIds    = List<String>.from(json['bookmarkedPostIds'] ?? bookmarkedPostIds);
+    hideEmail            = (json['hideEmail'] as bool?) ?? hideEmail;
+    hidePhone            = (json['hidePhone'] as bool?) ?? hidePhone;
+    blockedUids          = List<String>.from(json['blockedUids']      ?? blockedUids);
+    blockedByUids        = List<String>.from(json['blockedByUids']    ?? blockedByUids);
+    closeFriendsUids     = List<String>.from(json['closeFriendsUids'] ?? closeFriendsUids);
+    pinnedChats          = List<String>.from(json['pinnedChats']      ?? pinnedChats);
+  }
+
+  /// The subset of fields that belong in `Users/{uid}/private/data`, keyed
+  /// exactly as [mergePrivateData] expects to read them back.
+  Map<String, dynamic> toPrivateMap() => {
+        'realEmail':            email,
+        'realPhone':            phone,
+        'emailVerified':        emailVerified,
+        'bookmarkedPostIds':    bookmarkedPostIds,
+        'hideEmail':            hideEmail,
+        'hidePhone':            hidePhone,
+        'blockedUids':          blockedUids,
+        'blockedByUids':        blockedByUids,
+        'closeFriendsUids':     closeFriendsUids,
+        'pinnedChats':          pinnedChats,
+      };
+
+  /// The subset of fields that belong on the public `Users/{uid}` document —
+  /// readable by any signed-in user. `email`/`phone` here are a MIRROR of
+  /// the real values, nulled out when hideEmail/hidePhone is set, so a
+  /// direct Firestore read (bypassing the app's own UI) can't see them
+  /// either. The true, always-present values live in [toPrivateMap] so the
+  /// owner can still edit them from Settings even while hidden from others.
   Map<String, dynamic> toMap() => {
         'uid':                  uid,
         'name':                 name,
-        'email':                email,
-        'phone':                phone,
+        'email':                hideEmail ? null : email,
+        'phone':                hidePhone ? null : phone,
         'image':                image,
         'cover':                cover,
         'bio':                  bio,
         'isVerified':           isVerified,
-        'emailVerified':        emailVerified,
         'followersUids':        followersUids,
         'followingUids':        followingUids,
         'isPrivateAccount':     isPrivateAccount,
+        'isOnline':             isOnline,
+        'lastSeen':             lastSeen,
+        // Notification preferences stay public (not truly sensitive, and
+        // NotificationService.send() has to read the RECIPIENT's own
+        // preferences from whoever else's device is triggering the
+        // notification — that only works if these are readable cross-user).
         'notificationsEnabled': notificationsEnabled,
         'privacyNotifications': privacyNotifications,
         'notifyOnPostLike':     notifyOnPostLike,
@@ -145,15 +191,6 @@ class UserModel {
         'notifyOnMessage':      notifyOnMessage,
         'notifyOnFollow':       notifyOnFollow,
         'notifyOnMention':      notifyOnMention,
-        'bookmarkedPostIds':    bookmarkedPostIds,
-        'isOnline':             isOnline,
-        'lastSeen':             lastSeen,
-        'hideEmail':            hideEmail,
-        'hidePhone':            hidePhone,
-        'blockedUids':          blockedUids,
-        'blockedByUids':        blockedByUids,
-        'closeFriendsUids':     closeFriendsUids,
-        'pinnedChats':          pinnedChats,            // NEW
       };
 
   // ── Convenience helpers ────────────────────────────────────────────────────

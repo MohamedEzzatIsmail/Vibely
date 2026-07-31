@@ -44,6 +44,9 @@ class _SettingNotificationsSectionState extends State<SettingNotificationsSectio
   Future<void> _update(Map<String, dynamic> data) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
+    // These stay on the public doc — NotificationService.send() needs to
+    // read the RECIPIENT's own preferences from whoever else is triggering
+    // a notification, which only works if they're readable cross-user.
     await FirebaseFirestore.instance
         .collection('Users')
         .doc(uid)
@@ -134,13 +137,31 @@ class _SettingPrivacySectionState extends State<SettingPrivacySection> {
     _hidePhone        = widget.user.hidePhone;
   }
 
-  Future<void> _update(Map<String, dynamic> data) async {
+  Future<void> _updatePublic(Map<String, dynamic> data) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
-    await FirebaseFirestore.instance
-        .collection('Users')
-        .doc(uid)
-        .update(data);
+    await FirebaseFirestore.instance.collection('Users').doc(uid).update(data);
+  }
+
+  /// Toggling hideEmail/hidePhone needs two writes: the toggle itself goes
+  /// on the private doc, and the public doc's email/phone MIRROR has to be
+  /// updated in lockstep (nulled when hiding, restored to the real value
+  /// when un-hiding) — that mirror is what actually keeps the value out of
+  /// reach for other users, not the toggle by itself.
+  Future<void> _updateVisibility({
+    required String toggleField,
+    required bool hidden,
+    required String mirrorField,
+    required String? realValue,
+  }) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final userDoc = FirebaseFirestore.instance.collection('Users').doc(uid);
+    await userDoc
+        .collection('private')
+        .doc('data')
+        .set({toggleField: hidden}, SetOptions(merge: true));
+    await userDoc.update({mirrorField: hidden ? null : realValue});
   }
 
   @override
@@ -155,19 +176,33 @@ class _SettingPrivacySectionState extends State<SettingPrivacySection> {
           label: s.privateAccount,
           subtitle: s.privateAccountSubtitle,
           value: _isPrivateAccount,
-          onChanged: (v) { setState(() => _isPrivateAccount = v); _update({'isPrivateAccount': v}); },
+          onChanged: (v) { setState(() => _isPrivateAccount = v); _updatePublic({'isPrivateAccount': v}); },
         ),
         _ToggleTile(
           icon: Icons.email_outlined,
           label: s.hideEmail,
           value: _hideEmail,
-          onChanged: (v) { setState(() => _hideEmail = v); _update({'hideEmail': v}); },
+          onChanged: (v) {
+            setState(() => _hideEmail = v);
+            _updateVisibility(
+                toggleField: 'hideEmail',
+                hidden: v,
+                mirrorField: 'email',
+                realValue: widget.user.email);
+          },
         ),
         _ToggleTile(
           icon: Icons.phone_outlined,
           label: s.hidePhone,
           value: _hidePhone,
-          onChanged: (v) { setState(() => _hidePhone = v); _update({'hidePhone': v}); },
+          onChanged: (v) {
+            setState(() => _hidePhone = v);
+            _updateVisibility(
+                toggleField: 'hidePhone',
+                hidden: v,
+                mirrorField: 'phone',
+                realValue: widget.user.phone);
+          },
         ),
         ListTile(
           leading:

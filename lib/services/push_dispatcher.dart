@@ -22,10 +22,10 @@ import '../models/notification_model.dart';
 class PushDispatcher {
   PushDispatcher._();
 
-  /// Fill this in once you've deployed /push_server — e.g.
-  /// 'https://vibely-push.onrender.com'. Left empty, this is a safe no-op
-  /// so nothing breaks before you've deployed it.
-  static const String serverUrl = '';
+  /// The deployed /push_server instance (see project root, deployed on
+  /// Vercel). Left empty, this is a safe no-op so nothing breaks if it's
+  /// ever undeployed.
+  static const String serverUrl = 'https://vibely-xi.vercel.app';
 
   static Future<void> notify({
     required AppNotification notification,

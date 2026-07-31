@@ -8,6 +8,7 @@ import '../../share/local/constants.dart';
 import '../../share/style/app_colors.dart';
 import 'package:flutter/material.dart';
 import '../../share/local/app_strings.dart';
+import '../report/report_sheet.dart';
 
 import '../../models/post_model.dart';
 import '../../models/user_model.dart';
@@ -210,6 +211,12 @@ class _NonOwnerMenu extends StatelessWidget {
         if (value == 'bookmark' && post.postId != null) {
           PostsCubit.get(context).toggleBookmark(post.postId!);
         }
+        if (value == 'report') {
+          ReportSheet.show(context,
+              targetUid: post.uid ?? '',
+              targetType: 'post',
+              postId: post.postId);
+        }
       },
       itemBuilder: (_) => [
         PopupMenuItem(
@@ -226,6 +233,14 @@ class _NonOwnerMenu extends StatelessWidget {
               style: TextStyle(
                   color: isBookmarked ? kGold : Colors.white70),
             ),
+          ]),
+        ),
+        PopupMenuItem(
+          value: 'report',
+          child: Row(children: [
+            const Icon(Icons.flag_outlined, color: Colors.orangeAccent, size: 18),
+            const SizedBox(width: 8),
+            const Text('Report', style: TextStyle(color: Colors.white70)),
           ]),
         ),
       ],

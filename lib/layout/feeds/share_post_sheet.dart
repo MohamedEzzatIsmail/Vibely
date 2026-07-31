@@ -119,8 +119,8 @@ class _ShareSheetState extends State<_ShareSheet> {
 
   // vibely:// opens the app directly via the intent-filter (no server needed).
   // On Android, vibely:// links ARE shown as tappable blue text in WhatsApp.
-  String get _postUrl => 'https://vibely-app-d17.web.app/post/${widget.post.postId}';
-  String get _webUrl  => 'https://vibely-app-d17.web.app/post/${widget.post.postId}';
+  String get _postUrl => 'https://vibely-official.web.app/post/${widget.post.postId}';
+  String get _webUrl  => 'https://vibely-official.web.app/post/${widget.post.postId}';
 
   void _shareExternal() {
     // Send ONLY the bare https:// URL so every app renders it as a clickable link.

@@ -160,17 +160,19 @@ class PostRepository {
     required String postId,
     required bool bookmarked,
   }) async {
-    final userRef = _firestore.collection('Users').doc(uid);
+    final privateRef = _firestore
+        .collection('Users').doc(uid)
+        .collection('private').doc('data');
     final postRef = _posts.doc(postId);
     if (bookmarked) {
-      await userRef.update({
+      await privateRef.set({
         'bookmarkedPostIds': FieldValue.arrayUnion([postId]),
-      });
+      }, SetOptions(merge: true));
       await postRef.update({'bookmarkCount': FieldValue.increment(1)});
     } else {
-      await userRef.update({
+      await privateRef.set({
         'bookmarkedPostIds': FieldValue.arrayRemove([postId]),
-      });
+      }, SetOptions(merge: true));
       await postRef.update({'bookmarkCount': FieldValue.increment(-1)});
     }
   }

@@ -317,16 +317,20 @@ class StoriesCubit extends Cubit<StoriesState> {
   // ── Toggle Close Friends membership ──────────────────────────────────────
   Future<void> toggleCloseFriend(String targetUid) async {
     if (currentUser?.uid == null) return;
-    final userRef = _fs.collection('Users').doc(currentUser!.uid);
+    final privateRef = _fs
+        .collection('Users').doc(currentUser!.uid)
+        .collection('private').doc('data');
     final isCF = currentUser!.closeFriendsUids.contains(targetUid);
     if (isCF) {
       currentUser!.closeFriendsUids.remove(targetUid);
-      await userRef
-          .update({'closeFriendsUids': FieldValue.arrayRemove([targetUid])});
+      await privateRef.set(
+          {'closeFriendsUids': FieldValue.arrayRemove([targetUid])},
+          SetOptions(merge: true));
     } else {
       currentUser!.closeFriendsUids.add(targetUid);
-      await userRef
-          .update({'closeFriendsUids': FieldValue.arrayUnion([targetUid])});
+      await privateRef.set(
+          {'closeFriendsUids': FieldValue.arrayUnion([targetUid])},
+          SetOptions(merge: true));
     }
     emit(StoriesLoaded());
   }

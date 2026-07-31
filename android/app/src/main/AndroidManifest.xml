@@ -112,12 +112,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
 
                 <data android:scheme="https"
-                    android:host="chat-app-8a50b.web.app"
-                    android:pathPrefix="/post" />
-
-                <!-- ADD THIS -->
-                <data android:scheme="https"
-                    android:host="vibely-app-d17.web.app"
+                    android:host="vibely-official.web.app"
                     android:pathPrefix="/post" />
             </intent-filter>
 

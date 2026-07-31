@@ -21,7 +21,9 @@ service cloud.firestore {
 
     // ── Users ──────────────────────────────────────────────────────────────
     match /Users/{uid} {
-      // Any logged-in user can read public profile fields.
+      // Public profile fields only — email/phone/blocklist/bookmarks/pinned
+      // chats live in the private sub-document below instead. Any logged-in
+      // user can read this document.
       allow read: if isAuth();
 
       // Only the account owner can create or fully update their document.
@@ -56,6 +58,26 @@ service cloud.firestore {
         // Only the recipient can mark as read / delete.
         allow update: if isOwner(uid);
         allow delete: if isOwner(uid);
+      }
+
+      // ── Private data sub-document ─────────────────────────────────────────
+      // Email, phone, block lists, bookmarks, pinned chats, and close-friends
+      // list live here instead of on the main Users/{uid} doc — none of
+      // these should be readable by anyone but the account owner. (Notif-
+      // ication preferences deliberately stay on the public doc instead —
+      // see UserModel.toMap — since checking a recipient's preferences
+      // before sending them a notification requires reading them cross-user.)
+      match /private/{document} {
+        allow read: if isOwner(uid);
+        // The owner can write anything. Any other authenticated user may
+        // ALSO write, but only if blockedByUids is the sole field being
+        // changed — this is the one legitimate cross-user write needed:
+        // ChatRepository.blockUser()/unblockUser() maintain a denormalized
+        // reverse index so a blocked user can tell they've been blocked
+        // from their own doc, without ever reading the blocker's data.
+        allow write: if isOwner(uid)
+                     || (isAuth() && request.resource.data.diff(resource.data)
+                            .affectedKeys().hasOnly(['blockedByUids']));
       }
     }
 

@@ -134,10 +134,9 @@ class RegisterCubit extends Cubit<RegisterStates> {
       isVerified: false,
     );
 
-    await FirebaseFirestore.instance
-        .collection('Users')
-        .doc(uID)
-        .set(model.toMap());
+    final userDoc = FirebaseFirestore.instance.collection('Users').doc(uID);
+    await userDoc.set(model.toMap());
+    await userDoc.collection('private').doc('data').set(model.toPrivateMap());
 
     emit(RegisterSuccessStates());
   }

@@ -77,7 +77,12 @@ class _PostCard extends StatelessWidget {
                   onSelected: (v) {
                     if (v == 'delete') { cubit.deletePost(post.postId!); Navigator.pop(context); }
                     if (v == 'bookmark') cubit.toggleBookmark(post.postId!);
-                    if (v == 'report') {}
+                    if (v == 'report') {
+                      ReportSheet.show(context,
+                          targetUid: post.uid ?? '',
+                          targetType: 'post',
+                          postId: post.postId);
+                    }
                   },
                   itemBuilder: (_) => [
                     PopupMenuItem(value: 'bookmark', child: Row(children: [
@@ -94,6 +99,14 @@ class _PostCard extends StatelessWidget {
                         const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 18),
                         const SizedBox(width: 10),
                         Text(AppStrings.of(context).deletePost, style: const TextStyle(color: Colors.redAccent, fontSize: 14)),
+                      ])),
+                    // Reporting your own content doesn't make sense, so this
+                    // only shows on other people's posts.
+                    if (cubit.currentUser?.uid != post.uid)
+                      PopupMenuItem(value: 'report', child: Row(children: [
+                        const Icon(Icons.flag_outlined, color: Colors.orangeAccent, size: 18),
+                        const SizedBox(width: 10),
+                        Text('Report', style: TextStyle(color: AppColors.of(context).text, fontSize: 14)),
                       ])),
                   ],
                 ),

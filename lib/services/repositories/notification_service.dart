@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/notification_model.dart';
-import '../models/user_model.dart';
-import 'push_dispatcher.dart';
+import '../../models/notification_model.dart';
+import '../../models/user_model.dart';
+import '../push_dispatcher.dart';
 
 class NotificationService {
   NotificationService._();

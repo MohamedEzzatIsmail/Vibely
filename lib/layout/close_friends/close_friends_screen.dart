@@ -100,7 +100,9 @@ class _CloseFriendsScreenState extends State<CloseFriendsScreen> {
       await FirebaseFirestore.instance
           .collection('Users')
           .doc(myUid)
-          .update({'closeFriendsUids': update});
+          .collection('private')
+          .doc('data')
+          .set({'closeFriendsUids': update}, SetOptions(merge: true));
 
       setState(() {
         if (isNow) {
