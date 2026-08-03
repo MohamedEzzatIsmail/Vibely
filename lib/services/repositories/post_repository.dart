@@ -1,8 +1,3 @@
-/// All Firestore + Supabase access for posts — the feed, creating/editing/
-/// deleting posts, bookmarks, reactions, and the comment/reply threads
-/// nested under each post. Kept as a static-only class so PostsCubit never
-/// touches Firestore/Supabase directly.
-
 import 'dart:async';
 import 'dart:io';
 
@@ -38,7 +33,19 @@ class PostRepository {
     required void Function(QuerySnapshot<Map<String, dynamic>> snapshot) onData,
     required void Function(Object error) onError,
   }) {
+    // Firestore rejects a whole `list`/query request outright — not just
+    // the individual documents that would fail — if any candidate result
+    // could fail the read rule, and the Posts read rule depends on the
+    // per-document `privacy` field. Without a `where('privacy', ...)` here
+    // that mirrors the rule, this listener was permanently PERMISSION_DENIED
+    // for every user, every session (see the Firestore log warnings for
+    // "Listen for QueryWrapper... Posts order by -dateTime"). Restricting
+    // to public posts is what makes the query provably safe.
+    // NOTE: this means followers-only posts (and your own private ones)
+    // won't appear in the live/main feed via this listener — if that's not
+    // the intent, they need their own separate query/screen instead.
     return _posts
+        .where('privacy', isEqualTo: 'public')
         .orderBy('dateTime', descending: true)
         .limit(pageSize)
         .snapshots()
@@ -52,7 +59,10 @@ class PostRepository {
     required DocumentSnapshot lastDoc,
     required int pageSize,
   }) {
+    // Same reasoning as watchFeed() above — must match its filter, or
+    // pagination would silently diverge from what the live listener shows.
     return _posts
+        .where('privacy', isEqualTo: 'public')
         .orderBy('dateTime', descending: true)
         .startAfterDocument(lastDoc)
         .limit(pageSize)

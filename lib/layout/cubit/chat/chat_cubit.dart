@@ -1,8 +1,3 @@
-/// State management for 1-to-1 chats and group chats: messages, presence,
-/// typing, reactions, mute/pin/archive, disappearing messages, blocking, and
-/// full group administration. All Firestore/Supabase access goes through
-/// [ChatRepository] — this cubit owns no database clients directly.
-
 import 'dart:async';
 import 'dart:io';
 
@@ -301,7 +296,7 @@ class ChatCubit extends Cubit<ChatStates> {
       await ChatRepository.sendMessage(
         chatId: chatId,
         messageData: msg.toMap(),
-        participants: [currentUser!.uid, receiverId],
+        participants: _participants(receiverId),
         preview: text,
         lastSenderId: currentUser!.uid,
       );
@@ -328,7 +323,7 @@ class ChatCubit extends Cubit<ChatStates> {
       await ChatRepository.sendMessage(
         chatId: chatId,
         messageData: msg.toMap(),
-        participants: [currentUser!.uid, receiverId],
+        participants: _participants(receiverId),
         preview: preview,
         lastSenderId: currentUser!.uid,
       );
@@ -356,7 +351,7 @@ class ChatCubit extends Cubit<ChatStates> {
       await ChatRepository.sendMessage(
         chatId: chatId,
         messageData: msg.toMap(),
-        participants: [currentUser!.uid, receiverId],
+        participants: _participants(receiverId),
         preview: preview,
         lastSenderId: currentUser!.uid,
       );
@@ -383,7 +378,7 @@ class ChatCubit extends Cubit<ChatStates> {
       await ChatRepository.sendMessage(
         chatId: chatId,
         messageData: msg.toMap(),
-        participants: [currentUser!.uid, receiverId],
+        participants: _participants(receiverId),
         preview: preview,
         lastSenderId: currentUser!.uid,
       );
@@ -416,7 +411,7 @@ class ChatCubit extends Cubit<ChatStates> {
       await ChatRepository.sendMessage(
         chatId: chatId,
         messageData: fwd.toMap(),
-        participants: [currentUser!.uid, targetReceiverId],
+        participants: _participants(targetReceiverId),
         preview: preview,
         lastSenderId: currentUser!.uid,
       );
@@ -453,7 +448,7 @@ class ChatCubit extends Cubit<ChatStates> {
       await ChatRepository.sendMessage(
         chatId: chatId,
         messageData: msg.toMap(),
-        participants: [currentUser!.uid, receiverId],
+        participants: _participants(receiverId),
         preview: preview,
         lastSenderId: currentUser!.uid,
       );
@@ -481,7 +476,7 @@ class ChatCubit extends Cubit<ChatStates> {
       await ChatRepository.sendMessage(
         chatId: chatId,
         messageData: msg.toMap(),
-        participants: [currentUser!.uid, receiverId],
+        participants: _participants(receiverId),
         preview: text,
         lastSenderId: currentUser!.uid,
       );
@@ -664,7 +659,7 @@ class ChatCubit extends Cubit<ChatStates> {
     final chatId = _getChatId(otherUid);
     await ChatRepository.ensureChatDoc(
       chatId: chatId,
-      participants: [?currentUser!.uid, otherUid],
+      participants: _participants(otherUid),
     );
     if (!users.any((u) => u.uid == otherUid)) {
       final doc = await ChatRepository.getUser(otherUid);
@@ -1146,6 +1141,17 @@ class ChatCubit extends Cubit<ChatStates> {
     final ids = [currentUser!.uid!, otherId]..sort();
     return ids.join('_');
   }
+
+  /// Canonical, order-independent `participants` array for a 1-to-1 chat —
+  /// sorted the same way `_getChatId` sorts its two UIDs. The Chat doc's
+  /// `participants` field must never depend on who happens to be sending,
+  /// because Firestore rules require `participants` to stay byte-for-byte
+  /// identical between the stored doc and every subsequent update. If it
+  /// were built "me first" (as it used to be), whoever didn't send the
+  /// chat's first message would produce a reversed array on every reply and
+  /// get PERMISSION_DENIED forever after — this is what fixed that.
+  List<String> _participants(String otherId) =>
+      [currentUser!.uid!, otherId]..sort();
 
   String _previewText(MessageModel msg) {
     if (msg.text?.isNotEmpty == true) return msg.text!;

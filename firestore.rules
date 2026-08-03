@@ -155,9 +155,15 @@ service cloud.firestore {
       allow read:   if isParticipant();
       allow create: if willBeParticipant();
       // Participants can update chat metadata (last message, typing, etc.)
-      // but cannot change who the participants are.
+      // but cannot change who the participants are. Compared as sets, not
+      // as ordered lists — `participants` is written "me first" by whoever
+      // is sending, so two writers of the same 2-person chat will not
+      // necessarily produce the same array ORDER even when the membership
+      // itself hasn't changed. A plain `==` here made every reply from
+      // whoever didn't send the chat's first message fail permanently.
       allow update: if isParticipant()
-                    && request.resource.data.participants == resource.data.participants;
+                    && request.resource.data.participants.hasOnly(resource.data.participants)
+                    && resource.data.participants.hasOnly(request.resource.data.participants);
       allow delete: if false;
 
       // ── Messages sub-collection ──────────────────────────────────────────
