@@ -19,6 +19,11 @@ class AppNotification {
   String? commentId;
   String? replyId;
   String? chatId;
+  /// The Chats/{chatId}/Messages/{messageId} doc this notification is
+  /// about — only set for type == message. Lets the recipient's device
+  /// mark that specific message 'delivered' the moment the push arrives,
+  /// even if the app is backgrounded/terminated.
+  String? messageId;
   String? text;
   bool isSeen;
   bool isRead;
@@ -37,6 +42,7 @@ class AppNotification {
     this.commentId,
     this.replyId,
     this.chatId,
+    this.messageId,
     this.text,
     this.isSeen = false,
     this.isRead = false,
@@ -70,6 +76,7 @@ class AppNotification {
         commentId = json['commentId'],
         replyId = json['replyId'],
         chatId = json['chatId'],
+        messageId = json['messageId'],
         text = json['text'],
         isSeen = json['isSeen'] ?? false,
         isRead = json['isRead'] ?? false,
@@ -88,6 +95,7 @@ class AppNotification {
     'commentId': commentId,
     'replyId': replyId,
     'chatId': chatId,
+    'messageId': messageId,
     'text': text,
     'isSeen': isSeen,
     'isRead': isRead,

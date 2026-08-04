@@ -1,14 +1,3 @@
-// lib/layout/chats/message_bubble.dart
-//
-// Upgraded:
-//  • Supports image, video, audio (voice) media types
-//  • Forwarded indicator
-//  • deletedByOther hint ("You deleted this message")
-//  • Reaction bubble tappable → detail sheet callback
-//  • Selection highlight (isSelected param)
-//  • Long-press → selection mode (no conflict with action sheet)
-//  • Action sheet triggered ONLY via onActionsTap callback (never on long-press)
-
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../share/local/constants.dart';
 import '../../share/local/app_strings.dart';
@@ -332,7 +321,9 @@ class _BubbleBody extends StatelessWidget {
           if (isMe) ...[
             const SizedBox(width: 4),
             Icon(
-              msg.seen == true ? Icons.done_all_rounded : Icons.done_rounded,
+              (msg.seen == true || msg.delivered == true)
+                  ? Icons.done_all_rounded
+                  : Icons.done_rounded,
               size: 13,
               color: msg.seen == true ? const Color(0xFF1565C0) : metaColor,
             ),

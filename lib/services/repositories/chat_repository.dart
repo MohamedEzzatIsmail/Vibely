@@ -1,8 +1,3 @@
-/// All Firestore + Supabase access for 1-to-1 chats and group chats —
-/// messages, presence, reactions, mute/pin/archive, disappearing messages,
-/// blocking/reporting, and full group management. Kept as a static-only
-/// class so ChatCubit never touches Firestore/Supabase directly.
-
 import 'dart:async';
 import 'dart:io';
 
@@ -84,7 +79,7 @@ class ChatRepository {
   /// (last message, sender, timestamp) in a single batched write. Used for
   /// text, image, video, voice, forwarded, shared-post, and reply messages
   /// alike, since they all need the same two writes.
-  static Future<void> sendMessage({
+  static Future<String> sendMessage({
     required String chatId,
     required Map<String, dynamic> messageData,
     required List<String?> participants,
@@ -107,8 +102,9 @@ class ChatRepository {
       participants: participants.whereType<String>().toList(),
     );
 
+    final msgRef = chatRef.collection('Messages').doc();
     final batch = _firestore.batch();
-    batch.set(chatRef.collection('Messages').doc(), messageData);
+    batch.set(msgRef, messageData);
     batch.set(chatRef, {
       'chatId': chatId,
       'participants': participants,
@@ -118,6 +114,23 @@ class ChatRepository {
       'seenBy': [lastSenderId],
     }, SetOptions(merge: true));
     await batch.commit();
+    return msgRef.id;
+  }
+
+  /// Marks a message as delivered — called by the recipient's device the
+  /// moment the push notification for it arrives (foreground or
+  /// background/terminated), so the sender sees the double-grey-tick
+  /// "delivered" state in real time without the recipient needing to open
+  /// the app. Distinct from `seen`, which only flips once they actually
+  /// open the conversation.
+  static Future<void> markDelivered({
+    required String chatId,
+    required String messageId,
+  }) async {
+    await _chats.doc(chatId).collection('Messages').doc(messageId).update({
+      'delivered': true,
+      'deliveredAt': DateTime.now().toIso8601String(),
+    });
   }
 
   // ── Media uploads ────────────────────────────────────────────────────────

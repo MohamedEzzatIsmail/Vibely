@@ -293,14 +293,14 @@ class ChatCubit extends Cubit<ChatStates> {
       final nowStr = now.toIso8601String();
       final msg    = MessageModel(senderId: currentUser!.uid, receiverId: receiverId,
           text: text, dateTime: nowStr, seen: false);
-      await ChatRepository.sendMessage(
+      final messageId = await ChatRepository.sendMessage(
         chatId: chatId,
         messageData: msg.toMap(),
         participants: _participants(receiverId),
         preview: text,
         lastSenderId: currentUser!.uid,
       );
-      await _sendChatNotification(receiverId: receiverId, chatId: chatId, preview: text, mediaType: 'text');
+      await _sendChatNotification(receiverId: receiverId, chatId: chatId, messageId: messageId, preview: text, mediaType: 'text');
       emit(ChatSendMessageSuccessState());
     } catch (e) { emit(ChatErrorState(e.toString())); }
   }
@@ -320,7 +320,7 @@ class ChatCubit extends Cubit<ChatStates> {
       final msg = MessageModel(senderId: currentUser!.uid, receiverId: receiverId,
           text: caption.isNotEmpty ? caption : null, imageUrl: url,
           dateTime: nowStr, seen: false);
-      await ChatRepository.sendMessage(
+      final messageId = await ChatRepository.sendMessage(
         chatId: chatId,
         messageData: msg.toMap(),
         participants: _participants(receiverId),
@@ -328,7 +328,7 @@ class ChatCubit extends Cubit<ChatStates> {
         lastSenderId: currentUser!.uid,
       );
       uploadProgressMap.remove('pending');
-      await _sendChatNotification(receiverId: receiverId, chatId: chatId, preview: preview, mediaType: 'image');
+      await _sendChatNotification(receiverId: receiverId, chatId: chatId, messageId: messageId, preview: preview, mediaType: 'image');
       emit(ChatSendMessageSuccessState());
     } catch (e) { uploadProgressMap.remove('pending'); emit(ChatErrorState(e.toString())); }
   }
@@ -375,7 +375,7 @@ class ChatCubit extends Cubit<ChatStates> {
       const preview = '🎤 Voice message';
       final msg = MessageModel(senderId: currentUser!.uid, receiverId: receiverId,
           audioUrl: url, audioDuration: durationSeconds, waveformData: waveformData, dateTime: nowStr, seen: false);
-      await ChatRepository.sendMessage(
+      final messageId = await ChatRepository.sendMessage(
         chatId: chatId,
         messageData: msg.toMap(),
         participants: _participants(receiverId),
@@ -383,7 +383,7 @@ class ChatCubit extends Cubit<ChatStates> {
         lastSenderId: currentUser!.uid,
       );
       uploadProgressMap.remove('pending');
-      await _sendChatNotification(receiverId: receiverId, chatId: chatId, preview: preview, mediaType: 'audio');
+      await _sendChatNotification(receiverId: receiverId, chatId: chatId, messageId: messageId, preview: preview, mediaType: 'audio');
       emit(ChatSendMessageSuccessState());
     } catch (e) { uploadProgressMap.remove('pending'); emit(ChatErrorState(e.toString())); }
   }
@@ -408,7 +408,7 @@ class ChatCubit extends Cubit<ChatStates> {
         isForwarded: true, dateTime: nowStr, seen: false,
       );
       final preview    = _previewText(fwd);
-      await ChatRepository.sendMessage(
+      final messageId = await ChatRepository.sendMessage(
         chatId: chatId,
         messageData: fwd.toMap(),
         participants: _participants(targetReceiverId),
@@ -416,7 +416,7 @@ class ChatCubit extends Cubit<ChatStates> {
         lastSenderId: currentUser!.uid,
       );
       if (!fwd.hasVideo) await _sendChatNotification(
-          receiverId: targetReceiverId, chatId: chatId,
+          receiverId: targetReceiverId, chatId: chatId, messageId: messageId,
           preview: preview, mediaType: fwd.hasImage ? 'image' : 'text');
       emit(ChatSendMessageSuccessState());
     } catch (e) { emit(ChatErrorState(e.toString())); }
@@ -445,14 +445,14 @@ class ChatCubit extends Cubit<ChatStates> {
         sharedPostImage: sharedPostImage, sharedPostVideo: sharedPostVideo,
         dateTime: nowStr, seen: false,
       );
-      await ChatRepository.sendMessage(
+      final messageId = await ChatRepository.sendMessage(
         chatId: chatId,
         messageData: msg.toMap(),
         participants: _participants(receiverId),
         preview: preview,
         lastSenderId: currentUser!.uid,
       );
-      await _sendChatNotification(receiverId: receiverId, chatId: chatId, preview: preview, mediaType: 'text');
+      await _sendChatNotification(receiverId: receiverId, chatId: chatId, messageId: messageId, preview: preview, mediaType: 'text');
       emit(ChatSendMessageSuccessState());
     } catch (e) { emit(ChatErrorState(e.toString())); }
   }
@@ -473,14 +473,14 @@ class ChatCubit extends Cubit<ChatStates> {
         replyToSenderName: replyToSenderName, replyToText: replyToText,
         replyToMediaUrl: replyToMediaUrl, replyToIsStory: replyToIsStory,
       );
-      await ChatRepository.sendMessage(
+      final messageId = await ChatRepository.sendMessage(
         chatId: chatId,
         messageData: msg.toMap(),
         participants: _participants(receiverId),
         preview: text,
         lastSenderId: currentUser!.uid,
       );
-      await _sendChatNotification(receiverId: receiverId, chatId: chatId, preview: text, mediaType: 'text');
+      await _sendChatNotification(receiverId: receiverId, chatId: chatId, messageId: messageId, preview: text, mediaType: 'text');
       emit(ChatSendMessageSuccessState());
     } catch (e) { emit(ChatErrorState(e.toString())); }
   }
@@ -1188,6 +1188,7 @@ class ChatCubit extends Cubit<ChatStates> {
 
   Future<void> _sendChatNotification({
     required String receiverId, required String chatId,
+    required String messageId,
     required String preview, required String mediaType,
   }) async {
     if (context == null) return;
@@ -1195,6 +1196,7 @@ class ChatCubit extends Cubit<ChatStates> {
       id: null, type: NotificationType.message,
       fromUserId: currentUser!.uid!, fromUserName: currentUser!.name ?? '',
       fromUserImage: currentUser!.image ?? '', chatId: chatId,
+      messageId: messageId,
       text: preview, dateTime: DateTime.now().toIso8601String(),
     );
     await NotificationsCubit.get(context!).sendNotification(

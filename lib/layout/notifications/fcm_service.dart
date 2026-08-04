@@ -1,27 +1,41 @@
-// lib/layout/notifications/fcm_service.dart
-//
-// Fixes applied:
-//  • Video messages no longer trigger push notifications.
-//    The payload now carries a `mediaType` field; the cloud function / server
-//    side should also check this, but this client-side guard ensures the
-//    local foreground banner is suppressed for video messages.
-//  • Shared-post notifications are sent (unchanged behaviour).
-//  • Text message, image message, voice message, reply all produce banners.
-//  • Foreground banner suppressed when app is in the resumed state and the
-//    notification originated from the current open chat (chatId matches).
-
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../../models/notification_model.dart';
+import '../../services/repositories/chat_repository.dart';
 import '../../share/network/notification_router.dart';
+
+/// Marks the message this push refers to as 'delivered' — called from both
+/// the background/terminated handler and the foreground onMessage listener
+/// below, so the sender's tick flips grey->double-grey the moment this
+/// device receives the push, regardless of app state. Only applies to
+/// type == 'message' pushes, which are the only ones carrying a chatId +
+/// messageId pair (see push_dispatcher.dart / send-notification.js).
+Future<void> _markDeliveredIfMessage(Map<String, dynamic> data) async {
+  if (data['type'] != 'message') return;
+  final chatId = data['chatId'] as String?;
+  final messageId = data['messageId'] as String?;
+  if (chatId == null || chatId.isEmpty) return;
+  if (messageId == null || messageId.isEmpty) return;
+  try {
+    if (Firebase.apps.isEmpty) await Firebase.initializeApp();
+    await ChatRepository.markDelivered(chatId: chatId, messageId: messageId);
+  } catch (e) {
+    // Best-effort — a failure here should never crash the background
+    // isolate or block the notification banner from showing.
+    debugPrint('❌ [FCM] markDelivered: $e');
+  }
+}
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   debugPrint('📩 [FCM] Background: ${message.messageId}');
+  await _markDeliveredIfMessage(message.data);
 }
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -114,6 +128,8 @@ class FCMService {
         alert: true, badge: true, sound: true);
 
     FirebaseMessaging.onMessage.listen((msg) {
+      unawaited(_markDeliveredIfMessage(msg.data));
+
       // ── Video message gate ─────────────────────────────────────────────────
       // Spec: "Notifications sent on text and shared post.
       //        NOT sent on video messages."

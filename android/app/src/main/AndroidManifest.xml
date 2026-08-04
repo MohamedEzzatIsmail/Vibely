@@ -1,16 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  ═══════════════════════════════════════════════════════════════════════════
-  AndroidManifest.xml  –  relevant FCM / notification additions
-  ═══════════════════════════════════════════════════════════════════════════
-
-  Merge the sections below into your existing
-  android/app/src/main/AndroidManifest.xml
-
-  Lines already present in a default Flutter + Firebase project are marked
-  with (existing) so you know what to look for.
--->
-
 <manifest xmlns:tools="http://schemas.android.com/tools"
     xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -118,17 +106,14 @@
 
         </activity>
 
-        <!-- Firebase Messaging Service -->
-        <service
-            android:name="com.google.firebase.messaging.FirebaseMessagingService"
-            android:exported="false"
-            tools:ignore="MissingClass">
-
-            <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT" />
-            </intent-filter>
-
-        </service>
+        <!-- Firebase Messaging Service is provided automatically by the
+             firebase_messaging plugin's own manifest (merged in at build
+             time as FlutterFirebaseMessagingService) — do not redeclare
+             com.google.firebase.messaging.FirebaseMessagingService here.
+             That's the raw, unwired base class; declaring it alongside the
+             plugin's real service registers two different components for
+             the same MESSAGING_EVENT intent-filter, which is unnecessary
+             at best and can interfere with delivery at worst. -->
 
         <!-- Default notification channel -->
         <meta-data
@@ -152,14 +137,4 @@
 
     </application>
 
-</manifest>    <!--
-      ═══════════════════════════════════════════════════════════════════════════
-      android/app/src/main/res/values/colors.xml
-      ═══════════════════════════════════════════════════════════════════════════
-      Create this file (or add the colour to your existing colors.xml):
-
-      <?xml version="1.0" encoding="utf-8"?>
-      <resources>
-          <color name="notification_color">#E5C687</color>
-      </resources>
-    -->
+</manifest>

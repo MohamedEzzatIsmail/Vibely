@@ -6,6 +6,12 @@ class MessageModel {
   String? text;
   String? dateTime;
   bool? seen;
+  /// True once the recipient's device has confirmed receipt of the push
+  /// for this message (set by ChatRepository.markDelivered — see
+  /// fcm_service.dart) — independent of `seen`, which only flips once
+  /// they open the conversation. Mirrors WhatsApp's grey-vs-blue ticks.
+  bool? delivered;
+  String? deliveredAt;
   bool? deleted;
   bool? edited;
   String? videoUrl;
@@ -50,6 +56,8 @@ class MessageModel {
     this.text,
     this.dateTime,
     this.seen,
+    this.delivered,
+    this.deliveredAt,
     this.deleted,
     this.edited,
     this.videoUrl,
@@ -93,6 +101,8 @@ class MessageModel {
         text             = json['text'],
         dateTime         = json['dateTime'],
         seen             = json['seen'] ?? false,
+        delivered        = json['delivered'] ?? false,
+        deliveredAt      = json['deliveredAt'],
         deleted          = json['deleted'] ?? false,
         edited           = json['edited'] ?? false,
         videoUrl         = json['videoUrl'],
@@ -128,6 +138,8 @@ class MessageModel {
         'text':       text,
         'dateTime':   dateTime,
         'seen':       seen ?? false,
+        if (delivered == true) 'delivered': true,
+        if (deliveredAt != null) 'deliveredAt': deliveredAt,
         'deleted':    deleted ?? false,
         'edited':     edited ?? false,
         if (videoUrl       != null) 'videoUrl':       videoUrl,

@@ -66,6 +66,7 @@ class NotificationsCubit extends Cubit<NotificationsState> {
       commentId: notification.commentId,
       replyId: notification.replyId,
       chatId: notification.chatId,
+      messageId: notification.messageId,
       text: notification.text,
       dateTime: notification.dateTime,
       isSeen: false,
