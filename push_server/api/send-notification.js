@@ -1,10 +1,3 @@
-// push_server/api/send-notification.js
-//
-// Vercel serverless function — same logic as the Express version this
-// replaced, just in Vercel's function-per-file convention instead of an
-// always-running Express app. Deployed at /api/send-notification, and
-// vercel.json rewrites /send-notification to this file so the public URL
-// stays identical to what the Render setup would have used.
 const admin = require("firebase-admin");
 
 if (!admin.apps.length) {
@@ -70,6 +63,7 @@ function buildDataPayload(data) {
   if (data.commentId) payload.commentId = String(data.commentId);
   if (data.replyId) payload.replyId = String(data.replyId);
   if (data.chatId) payload.chatId = String(data.chatId);
+  if (data.messageId) payload.messageId = String(data.messageId);
   if (data.text) payload.text = String(data.text);
   return payload;
 }

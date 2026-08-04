@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart' show FieldValue, DocumentSnapshot, QuerySnapshot;
+import 'package:firebase_auth/firebase_auth.dart' show FirebaseAuth;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -787,7 +788,7 @@ class ChatCubit extends Cubit<ChatStates> {
         final entries = snap.docs.map((d) => MapEntry(d.id, MessageModel.fromJson(d.data())))
             .where((e) => !e.value.deletedForMe.contains(myUid))
             .where((e) => e.value.senderId == null ||
-                !isBlockedPair(e.value.senderId!))
+            !isBlockedPair(e.value.senderId!))
             .toList();
         groupMessagesMap[groupId]        = entries.map((e) => e.value).toList();
         groupMessagesWithIdsMap[groupId] = entries;
@@ -1035,10 +1036,6 @@ class ChatCubit extends Cubit<ChatStates> {
           final deletedForMe = List<String>.from(d['deletedForMe'] ?? []);
           if (deletedForMe.contains(myUid)) continue;
 
-          // Skip messages the other party deleted but marked as stub
-          // (deletedByOther = true means the other side has already hidden their
-          //  copy; the stub "You deleted this message" is their local view only)
-
           // This is the first visible message — use it as the preview
           lastMessages[userId] = d['text'] ??
               (d['imageUrl'] != null
@@ -1138,7 +1135,14 @@ class ChatCubit extends Cubit<ChatStates> {
   int    getUnreadCount(String userId) => unreadMap[userId] ?? 0;
 
   String _getChatId(String otherId) {
-    final ids = [currentUser!.uid!, otherId]..sort();
+    // currentUser (the full UserModel) is only set once Home finishes its
+    // own async Firestore fetch after login. A notification tap on a cold
+    // start can open ChatScreen straight from MyApp's first frame, before
+    // Home has ever run — so currentUser can still be null here. The UID
+    // alone doesn't need that: FirebaseAuth has it synchronously as soon
+    // as the persisted session restores, well before first frame.
+    final myUid = currentUser?.uid ?? FirebaseAuth.instance.currentUser?.uid;
+    final ids = [myUid ?? '', otherId]..sort();
     return ids.join('_');
   }
 
