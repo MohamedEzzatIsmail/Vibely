@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:http/http.dart' as http;
 
 import '../../models/notification_model.dart';
 import '../../services/repositories/chat_repository.dart';
@@ -45,7 +47,7 @@ class FCMService {
 
   static final FirebaseMessaging            _messaging = FirebaseMessaging.instance;
   static final FlutterLocalNotificationsPlugin _local =
-      FlutterLocalNotificationsPlugin();
+  FlutterLocalNotificationsPlugin();
 
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
     'high_importance_channel',
@@ -64,6 +66,38 @@ class FCMService {
   /// Used to suppress in-app banners for the currently-viewed conversation.
   static String? _activeChatId;
   static void setActiveChatId(String? id) => _activeChatId = id;
+
+  // ── Avatar cache ───────────────────────────────────────────────────────────
+  /// Sender profile photos, downloaded once per URL and reused across
+  /// notifications — avoids re-downloading the same avatar on every message
+  /// from the same person within this app session.
+  static final Map<String, Uint8List> _avatarCache = {};
+
+  static Future<Uint8List?> _fetchAvatar(String? url) async {
+    if (url == null || url.isEmpty) return null;
+    final cached = _avatarCache[url];
+    if (cached != null) return cached;
+    try {
+      final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 5));
+      if (res.statusCode == 200) {
+        _avatarCache[url] = res.bodyBytes;
+        return res.bodyBytes;
+      }
+    } catch (e) {
+      debugPrint('❌ [FCM] avatar fetch: $e');
+    }
+    return null;
+  }
+
+  // ── Chat message history (for WhatsApp-style stacked bubbles) ─────────────
+  /// Per-chat running list of recent messages, so a second message from the
+  /// same conversation appends onto the same notification (like WhatsApp)
+  /// instead of replacing it or spawning a separate one. Session-only — not
+  /// persisted to disk, so this resets on app restart. That's an acceptable
+  /// simplification: worst case after a restart is the notification starts
+  /// a fresh thread instead of continuing an old one, which still looks
+  /// correct, just without the older lines.
+  static final Map<String, List<Message>> _chatHistory = {};
 
   // ── Public API ─────────────────────────────────────────────────────────────
   static Future<void> init() async {
@@ -101,10 +135,10 @@ class FCMService {
   }
 
   static Future<void> _createAndroidChannel() async {
-    await _local
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(_channel);
+    final AndroidFlutterLocalNotificationsPlugin? androidImpl = _local
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    if (androidImpl == null) return;
+    await androidImpl.createNotificationChannel(_channel);
   }
 
   static Future<void> _initLocal() async {
@@ -152,7 +186,7 @@ class FCMService {
         return;
       }
 
-      _showBanner(msg);
+      unawaited(_showBanner(msg));
     });
   }
 
@@ -204,10 +238,54 @@ class FCMService {
     final n = msg.notification;
     if (n == null) return;
 
+    final data      = msg.data;
+    final type      = data['type'] as String?;
+    final fromName  = (data['fromUserName'] as String?)?.trim().isNotEmpty == true
+        ? data['fromUserName'] as String
+        : (n.title ?? 'Vibely');
+    final fromImage = data['fromUserImage'] as String?;
+    final body      = n.body ?? '';
+
+    final avatarBytes = await _fetchAvatar(fromImage);
+    final AndroidBitmap<Object> largeIcon = avatarBytes != null
+        ? ByteArrayAndroidBitmap(avatarBytes)
+        : const DrawableResourceAndroidBitmap('@mipmap/ic_launcher');
+    final personIcon =
+    avatarBytes != null ? ByteArrayAndroidIcon(avatarBytes) : null;
+
+    late final int notifId;
+    late final StyleInformation style;
+    late final String groupKey;
+
+    if (type == 'message') {
+      // ── WhatsApp-style: grouped by conversation, sender avatar + bubbles ──
+      final chatId = data['chatId'] as String? ?? (msg.messageId ?? 'chat');
+      notifId  = chatId.hashCode;
+      groupKey = 'chat_$chatId';
+
+      final sender = Person(name: fromName, icon: personIcon, key: chatId);
+      final history = _chatHistory.putIfAbsent(chatId, () => []);
+      history.add(Message(body, DateTime.now(), sender));
+      if (history.length > 5) history.removeAt(0); // keep it short
+
+      style = MessagingStyleInformation(
+        sender,
+        groupConversation:
+        (data['isGroup'] as String?) == 'true' || data['isGroup'] == true,
+        conversationTitle: fromName,
+        messages: history,
+      );
+    } else {
+      // ── Facebook-style: name + action text, expandable if long ────────────
+      notifId  = msg.messageId.hashCode;
+      groupKey = 'social';
+      style = BigTextStyleInformation(body, contentTitle: fromName);
+    }
+
     await _local.show(
-      id: msg.messageId.hashCode,
-      title: n.title ?? 'Vibely',
-      body: n.body ?? '',
+      id: notifId,
+      title: fromName,
+      body: body,
       notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
           _channel.id, _channel.name,
@@ -215,7 +293,12 @@ class FCMService {
           importance: Importance.max,
           priority:   Priority.high,
           icon:       '@mipmap/ic_launcher',
-          largeIcon:  const DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
+          largeIcon:  largeIcon,
+          styleInformation: style,
+          groupKey: groupKey,
+          category: type == 'message'
+              ? AndroidNotificationCategory.message
+              : AndroidNotificationCategory.social,
         ),
         iOS: const DarwinNotificationDetails(
           presentAlert: true,
