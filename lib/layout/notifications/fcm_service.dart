@@ -2,15 +2,20 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 
+import '../../models/message_model.dart';
 import '../../models/notification_model.dart';
 import '../../services/repositories/chat_repository.dart';
 import '../../share/network/notification_router.dart';
+
+const String _actionReply = 'reply';
+const String _actionMarkSeen = 'mark_seen';
 
 /// Marks the message this push refers to as 'delivered' — called from both
 /// the background/terminated handler and the foreground onMessage listener
@@ -40,6 +45,67 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await _markDeliveredIfMessage(message.data);
 }
 
+/// Handles "Reply" / "Mark as read" being tapped on a notification action —
+/// runs in its own isolate when the app is backgrounded/terminated, or
+/// inline if the app happens to be running. Must be a top-level function
+/// with this exact pragma for the background case to work.
+@pragma('vm:entry-point')
+Future<void> notificationBackgroundHandler(NotificationResponse response) async {
+  if (response.notificationResponseType !=
+      NotificationResponseType.selectedNotificationAction) {
+    return;
+  }
+  final payload = response.payload;
+  if (payload == null) return;
+
+  Map<String, dynamic> data;
+  try {
+    data = jsonDecode(payload) as Map<String, dynamic>;
+  } catch (_) {
+    return;
+  }
+  if (data['type'] != 'message') return;
+
+  final chatId = data['chatId'] as String?;
+  final otherUid = data['fromUserId'] as String?;
+  if (chatId == null || chatId.isEmpty) return;
+  if (otherUid == null || otherUid.isEmpty) return;
+
+  try {
+    if (Firebase.apps.isEmpty) await Firebase.initializeApp();
+    final myUid = FirebaseAuth.instance.currentUser?.uid;
+    if (myUid == null) return;
+
+    if (response.actionId == _actionMarkSeen) {
+      await ChatRepository.markAsSeen(chatId: chatId, myUid: myUid);
+    } else if (response.actionId == _actionReply) {
+      final replyText = response.input?.trim();
+      if (replyText == null || replyText.isEmpty) return;
+      final nowStr = DateTime.now().toIso8601String();
+      final msg = MessageModel(
+        senderId: myUid,
+        receiverId: otherUid,
+        text: replyText,
+        dateTime: nowStr,
+        seen: false,
+      );
+      await ChatRepository.sendMessage(
+        chatId: chatId,
+        messageData: msg.toMap(),
+        participants: [myUid, otherUid]..sort(),
+        preview: replyText,
+        lastSenderId: myUid,
+      );
+    }
+    // Either action means this conversation notification has been dealt
+    // with — clear it and its local history for a clean slate next time.
+    FCMService.clearChatHistory(chatId);
+    await FlutterLocalNotificationsPlugin().cancel(chatId.hashCode);
+  } catch (e) {
+    debugPrint('❌ [FCM] notification action: $e');
+  }
+}
+
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 class FCMService {
@@ -47,7 +113,7 @@ class FCMService {
 
   static final FirebaseMessaging            _messaging = FirebaseMessaging.instance;
   static final FlutterLocalNotificationsPlugin _local =
-  FlutterLocalNotificationsPlugin();
+      FlutterLocalNotificationsPlugin();
 
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
     'high_importance_channel',
@@ -92,12 +158,15 @@ class FCMService {
   // ── Chat message history (for WhatsApp-style stacked bubbles) ─────────────
   /// Per-chat running list of recent messages, so a second message from the
   /// same conversation appends onto the same notification (like WhatsApp)
-  /// instead of replacing it or spawning a separate one. Session-only — not
-  /// persisted to disk, so this resets on app restart. That's an acceptable
-  /// simplification: worst case after a restart is the notification starts
-  /// a fresh thread instead of continuing an old one, which still looks
-  /// correct, just without the older lines.
+  /// instead of replacing it or spawning a separate one, shown oldest to
+  /// newest. Session-only — not persisted to disk, so this resets on app
+  /// restart. That's an acceptable simplification: worst case after a
+  /// restart is the notification starts a fresh thread instead of
+  /// continuing an old one, which still looks correct, just without the
+  /// older lines.
   static final Map<String, List<Message>> _chatHistory = {};
+
+  static void clearChatHistory(String chatId) => _chatHistory.remove(chatId);
 
   // ── Public API ─────────────────────────────────────────────────────────────
   static Future<void> init() async {
@@ -152,8 +221,16 @@ class FCMService {
         ),
       ),
       onDidReceiveNotificationResponse: (r) {
+        if (r.notificationResponseType ==
+            NotificationResponseType.selectedNotificationAction) {
+          // App happens to be running — handle it inline rather than
+          // waiting on the background isolate.
+          unawaited(notificationBackgroundHandler(r));
+          return;
+        }
         if (r.payload != null) _onLocalTap(r.payload!);
       },
+      onDidReceiveBackgroundNotificationResponse: notificationBackgroundHandler,
     );
   }
 
@@ -245,33 +322,35 @@ class FCMService {
         : (n.title ?? 'Vibely');
     final fromImage = data['fromUserImage'] as String?;
     final body      = n.body ?? '';
+    final isMessage = type == 'message';
 
     final avatarBytes = await _fetchAvatar(fromImage);
     final AndroidBitmap<Object> largeIcon = avatarBytes != null
         ? ByteArrayAndroidBitmap(avatarBytes)
         : const DrawableResourceAndroidBitmap('@mipmap/ic_launcher');
     final personIcon =
-    avatarBytes != null ? ByteArrayAndroidIcon(avatarBytes) : null;
+        avatarBytes != null ? ByteArrayAndroidIcon(avatarBytes) : null;
 
     late final int notifId;
     late final StyleInformation style;
     late final String groupKey;
 
-    if (type == 'message') {
-      // ── WhatsApp-style: grouped by conversation, sender avatar + bubbles ──
+    if (isMessage) {
+      // ── WhatsApp-style: grouped by conversation, sender avatar + bubbles,
+      //    oldest-to-newest, hidden on the lock screen until unlocked/opened ──
       final chatId = data['chatId'] as String? ?? (msg.messageId ?? 'chat');
       notifId  = chatId.hashCode;
       groupKey = 'chat_$chatId';
 
       final sender = Person(name: fromName, icon: personIcon, key: chatId);
       final history = _chatHistory.putIfAbsent(chatId, () => []);
-      history.add(Message(body, DateTime.now(), sender));
+      history.add(Message(body, DateTime.now(), sender)); // appended = newest last
       if (history.length > 5) history.removeAt(0); // keep it short
 
       style = MessagingStyleInformation(
         sender,
         groupConversation:
-        (data['isGroup'] as String?) == 'true' || data['isGroup'] == true,
+            (data['isGroup'] as String?) == 'true' || data['isGroup'] == true,
         conversationTitle: fromName,
         messages: history,
       );
@@ -296,9 +375,33 @@ class FCMService {
           largeIcon:  largeIcon,
           styleInformation: style,
           groupKey: groupKey,
-          category: type == 'message'
+          category: isMessage
               ? AndroidNotificationCategory.message
               : AndroidNotificationCategory.social,
+          // Content hidden on the lock screen until the phone is unlocked —
+          // matches WhatsApp. Whether this actually redacts depends on the
+          // phone's own lock-screen privacy setting; the app can only
+          // request it, the OS decides.
+          visibility: isMessage ? NotificationVisibility.private : null,
+          actions: isMessage
+              ? <AndroidNotificationAction>[
+                  AndroidNotificationAction(
+                    _actionReply,
+                    'Reply',
+                    showsUserInterface: false,
+                    cancelNotification: false,
+                    inputs: const [
+                      AndroidNotificationActionInput(label: 'Type a message…'),
+                    ],
+                  ),
+                  const AndroidNotificationAction(
+                    _actionMarkSeen,
+                    'Mark as read',
+                    showsUserInterface: false,
+                    cancelNotification: true,
+                  ),
+                ]
+              : null,
         ),
         iOS: const DarwinNotificationDetails(
           presentAlert: true,
