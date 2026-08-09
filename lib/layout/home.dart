@@ -14,6 +14,7 @@ import 'cubit/post/post_cubit.dart';
 import 'feeds/post_details_screen.dart';
 import 'stories/stories_cubit.dart';
 import '../share/local/media_permission_service.dart';
+import '../services/presence_service.dart';
 import 'dart:async';
 import 'package:app_links/app_links.dart';
 
@@ -77,6 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
               StoriesCubit.get(context)
                 ..setUser(model)
                 ..loadStories();
+              PresenceService.instance.start(model.uid!);
             }
           }
         },

@@ -100,7 +100,7 @@ Future<void> notificationBackgroundHandler(NotificationResponse response) async 
     // Either action means this conversation notification has been dealt
     // with — clear it and its local history for a clean slate next time.
     FCMService.clearChatHistory(chatId);
-    await FlutterLocalNotificationsPlugin().cancel(chatId.hashCode);
+    await FlutterLocalNotificationsPlugin().cancel(id: chatId.hashCode);
   } catch (e) {
     debugPrint('❌ [FCM] notification action: $e');
   }

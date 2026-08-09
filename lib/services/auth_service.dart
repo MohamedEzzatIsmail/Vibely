@@ -1,12 +1,6 @@
-// lib/services/auth_service.dart
-//
-// Reactive auth state service.
-// Replace the global `String? uID` in constants.dart with this singleton.
-// Usage:
-//   AuthService.instance.currentUid  — synchronous (may be null before auth)
-//   AuthService.instance.authChanges — Stream<User?>
-
 import 'package:firebase_auth/firebase_auth.dart';
+
+import 'presence_service.dart';
 
 class AuthService {
   AuthService._();
@@ -25,6 +19,10 @@ class AuthService {
 
   /// Sign out and clear all local session data.
   Future<void> signOut() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid != null) {
+      await PresenceService.instance.stop(uid);
+    }
     await _auth.signOut();
   }
 

@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../share/local/app_strings.dart';
 
@@ -13,6 +12,7 @@ import '../../models/user_model.dart';
 import '../../share/local/constants.dart';
 import '../../share/local/cashe_helper.dart';
 import '../../share/style/app_colors.dart';
+import '../../services/auth_service.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -112,7 +112,7 @@ class SettingsScreen extends StatelessWidget {
     PostsCubit.get(context).clearFeed();
     ChatCubit.get(context).disposeAllChats();
 
-    await FirebaseAuth.instance.signOut();
+    await AuthService.instance.signOut();
     await CashHelper.saveData(key: 'uId', value: null);
 
     if (context.mounted) {

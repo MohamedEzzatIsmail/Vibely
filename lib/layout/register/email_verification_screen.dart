@@ -7,6 +7,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../share/local/cashe_helper.dart';
 import '../home.dart';
 import '../login/login_screen.dart';
+import '../../services/auth_service.dart';
 import 'cubit/register_cubit.dart';
 import 'cubit/register_states.dart';
 
@@ -174,7 +175,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                 const SizedBox(height: 8),
                 TextButton(
                   onPressed: () async {
-                    await FirebaseAuth.instance.signOut();
+                    await AuthService.instance.signOut();
                     if (!context.mounted) return;
                     Navigator.pushAndRemoveUntil(
                       context,

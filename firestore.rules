@@ -176,11 +176,22 @@ service cloud.firestore {
       }
 
       match /Messages/{msgId} {
-        allow read:   if isChatParticipant();
-        allow create: if isChatParticipant()
-                      && request.resource.data.senderId == request.auth.uid;
-        allow update: if isChatParticipant();   // edit / reactions / pin / delete flag
-        allow delete: if false;                 // soft-delete via isDeleted flag
+          allow read:   if isChatParticipant();
+          allow create: if isChatParticipant()
+                        && request.resource.data.senderId == request.auth.uid;
+
+          // The sender can change anything about their own message (edit
+          // text, delete for everyone, etc.) except reassigning who sent it.
+          // Any OTHER participant may only touch delivery/seen/reaction/
+          // local-hide state — never the message content or authorship.
+          allow update: if isChatParticipant() && (
+                (resource.data.senderId == request.auth.uid
+                  && request.resource.data.senderId == resource.data.senderId)
+             || request.resource.data.diff(resource.data).affectedKeys()
+                  .hasOnly(['seen', 'delivered', 'deliveredAt',
+                            'deletedForMe', 'deletedByOther', 'reactions'])
+          );
+          allow delete: if false;                 // soft-delete via isDeleted flag
       }
     }
 
@@ -223,14 +234,19 @@ service cloud.firestore {
       }
 
       match /Messages/{msgId} {
-        allow read:   if isGroupMember();
-        // 'system' is used for auto-generated messages (e.g. "X left the
-        // group") — see ChatCubit.leaveGroup().
-        allow create: if isGroupMember()
-                      && (request.resource.data.senderId == request.auth.uid
-                          || request.resource.data.senderId == 'system');
-        allow update: if isGroupMember();
-        allow delete: if false;
+          allow read:   if isGroupMember();
+          // 'system' is used for auto-generated messages (e.g. "X left the
+          // group") — see ChatCubit.leaveGroup().
+          allow create: if isGroupMember()
+                        && (request.resource.data.senderId == request.auth.uid
+                            || request.resource.data.senderId == 'system');
+          // No reaction/seen feature exists for group messages (unlike 1:1
+          // chats) — only the sender editing/deleting their own message, so
+          // this can be sender-only with no shared-field carve-out.
+          allow update: if isGroupMember()
+                        && resource.data.senderId == request.auth.uid
+                        && request.resource.data.senderId == resource.data.senderId;
+          allow delete: if false;
       }
     }
 
