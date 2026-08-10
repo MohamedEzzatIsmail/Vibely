@@ -145,6 +145,7 @@ extension ChatScreenActions on _ChatScreenState {
     final count = _selected.length;
 
     showModalBottomSheet(
+      isScrollControlled: true,
       context: context,
       backgroundColor: AppColors.of(context).surface,
       shape: const RoundedRectangleBorder(
@@ -249,6 +250,7 @@ extension ChatScreenActions on _ChatScreenState {
     }
 
     showModalBottomSheet(
+      isScrollControlled: true,
       context: context,
       backgroundColor: AppColors.of(context).surface,
       shape: const RoundedRectangleBorder(
@@ -366,6 +368,7 @@ extension ChatScreenActions on _ChatScreenState {
   // they should only be able to remove the placeholder from their own chat.
   void _showDeletedMsgActions(MessageModel msg, String docId) {
     showModalBottomSheet(
+      isScrollControlled: true,
       context: context,
       backgroundColor: AppColors.of(context).surface,
       shape: const RoundedRectangleBorder(
@@ -416,6 +419,7 @@ extension ChatScreenActions on _ChatScreenState {
   // ── Forward sheet ─────────────────────────────────────────────────────────────
   void _showForwardSheet(List<MessageModel> msgs) {
     showModalBottomSheet(
+      isScrollControlled: true,
       context: context,
       backgroundColor: AppColors.of(context).surface,
       shape: const RoundedRectangleBorder(
@@ -675,6 +679,7 @@ extension ChatScreenActions on _ChatScreenState {
   void _showDisappearSheet() {
     final current = cubit.getDisappearDays(widget.user.uid!);
     showModalBottomSheet(
+      isScrollControlled: true,
       context: context, backgroundColor: AppColors.of(context).surface,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),

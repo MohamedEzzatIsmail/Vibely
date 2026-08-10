@@ -42,7 +42,9 @@ Future<void> _markDeliveredIfMessage(Map<String, dynamic> data) async {
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   debugPrint('📩 [FCM] Background: ${message.messageId}');
+  if (Firebase.apps.isEmpty) await Firebase.initializeApp();
   await _markDeliveredIfMessage(message.data);
+  await FCMService.showBackgroundBanner(message);
 }
 
 /// Handles "Reply" / "Mark as read" being tapped on a notification action —
@@ -167,6 +169,18 @@ class FCMService {
   static final Map<String, List<Message>> _chatHistory = {};
 
   static void clearChatHistory(String chatId) => _chatHistory.remove(chatId);
+
+  static bool _localInitializedInThisIsolate = false;
+
+  static Future<void> showBackgroundBanner(RemoteMessage msg) async {
+    final mediaType = msg.data['mediaType'] as String?;
+    if (mediaType == 'video') return;
+    if (!_localInitializedInThisIsolate) {
+      await _initLocal();
+      _localInitializedInThisIsolate = true;
+    }
+    await _showBanner(msg);
+  }
 
   // ── Public API ─────────────────────────────────────────────────────────────
   static Future<void> init() async {
