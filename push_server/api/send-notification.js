@@ -144,25 +144,50 @@ module.exports = async (req, res) => {
     }
 
     const { title, body } = buildAlert(data);
+    const isMessage = data.type === "message";
 
     const message = {
       token,
-      notification: { title, body },
       data: buildDataPayload(data),
       android: {
         priority: "high",
-        notification: {
-          channelId: "high_importance_channel",
-          defaultSound: true,
-          defaultVibrateTimings: true,
-        },
+        // For message-type pushes, deliberately omit android.notification
+        // (and the top-level notification block below) so Android does
+        // NOT auto-display anything on its own. Without this, Android's
+        // own system notification and our Dart-built rich one (avatar,
+        // MessagingStyle, Reply/Mark-as-read actions) both fired and
+        // raced each other — the bug where a plain notification appeared
+        // first, a second message sometimes showed nothing at all, and a
+        // later notification would show stale content once our (slower,
+        // cold-starting) background isolate finally caught up. Data-only
+        // makes our own background handler the ONLY thing that ever
+        // shows a message notification — same approach WhatsApp/
+        // Telegram/Messenger use, for exactly this reason.
+        ...(isMessage ? {} : {
+          notification: {
+            channelId: "high_importance_channel",
+            defaultSound: true,
+            defaultVibrateTimings: true,
+          },
+        }),
       },
       apns: {
         payload: {
-          aps: { sound: "default", badge: 1 },
+          aps: {
+            sound: "default",
+            badge: 1,
+            // iOS still needs its own alert block to show anything while
+            // backgrounded, unless a Notification Service Extension is
+            // added to build one client-side (not set up in this app yet
+            // — add one if/when iOS support is actually shipped).
+            alert: { title, body },
+          },
         },
       },
     };
+    if (!isMessage) {
+      message.notification = { title, body };
+    }
 
     await admin.messaging().send(message);
     res.status(200).json({ success: true });

@@ -53,36 +53,62 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 /// with this exact pragma for the background case to work.
 @pragma('vm:entry-point')
 Future<void> notificationBackgroundHandler(NotificationResponse response) async {
+  debugPrint('🔔 [FCM] action tapped: id=${response.actionId} '
+      'type=${response.notificationResponseType} input=${response.input}');
+
   if (response.notificationResponseType !=
       NotificationResponseType.selectedNotificationAction) {
+    debugPrint('🔕 [FCM] action: not an action tap, ignoring');
     return;
   }
   final payload = response.payload;
-  if (payload == null) return;
+  if (payload == null) {
+    debugPrint('❌ [FCM] action: no payload attached');
+    return;
+  }
 
   Map<String, dynamic> data;
   try {
     data = jsonDecode(payload) as Map<String, dynamic>;
-  } catch (_) {
+  } catch (e) {
+    debugPrint('❌ [FCM] action: payload decode failed: $e');
     return;
   }
-  if (data['type'] != 'message') return;
+  if (data['type'] != 'message') {
+    debugPrint('🔕 [FCM] action: not a message-type payload');
+    return;
+  }
 
   final chatId = data['chatId'] as String?;
   final otherUid = data['fromUserId'] as String?;
-  if (chatId == null || chatId.isEmpty) return;
-  if (otherUid == null || otherUid.isEmpty) return;
+  if (chatId == null || chatId.isEmpty) {
+    debugPrint('❌ [FCM] action: missing chatId in payload');
+    return;
+  }
+  if (otherUid == null || otherUid.isEmpty) {
+    debugPrint('❌ [FCM] action: missing fromUserId in payload');
+    return;
+  }
 
   try {
     if (Firebase.apps.isEmpty) await Firebase.initializeApp();
     final myUid = FirebaseAuth.instance.currentUser?.uid;
-    if (myUid == null) return;
+    if (myUid == null) {
+      debugPrint('❌ [FCM] action: no signed-in user in this isolate');
+      return;
+    }
 
     if (response.actionId == _actionMarkSeen) {
+      debugPrint('👁️ [FCM] action: marking seen for $chatId');
       await ChatRepository.markAsSeen(chatId: chatId, myUid: myUid);
+      debugPrint('✅ [FCM] action: marked seen');
     } else if (response.actionId == _actionReply) {
       final replyText = response.input?.trim();
-      if (replyText == null || replyText.isEmpty) return;
+      if (replyText == null || replyText.isEmpty) {
+        debugPrint('❌ [FCM] action: reply text was empty');
+        return;
+      }
+      debugPrint('✉️ [FCM] action: sending reply "$replyText" to $chatId');
       final nowStr = DateTime.now().toIso8601String();
       final msg = MessageModel(
         senderId: myUid,
@@ -98,13 +124,14 @@ Future<void> notificationBackgroundHandler(NotificationResponse response) async 
         preview: replyText,
         lastSenderId: myUid,
       );
+      debugPrint('✅ [FCM] action: reply sent successfully');
     }
     // Either action means this conversation notification has been dealt
     // with — clear it and its local history for a clean slate next time.
     FCMService.clearChatHistory(chatId);
     await FlutterLocalNotificationsPlugin().cancel(id: chatId.hashCode);
   } catch (e) {
-    debugPrint('❌ [FCM] notification action: $e');
+    debugPrint('❌ [FCM] notification action FAILED: $e');
   }
 }
 
@@ -115,7 +142,7 @@ class FCMService {
 
   static final FirebaseMessaging            _messaging = FirebaseMessaging.instance;
   static final FlutterLocalNotificationsPlugin _local =
-      FlutterLocalNotificationsPlugin();
+  FlutterLocalNotificationsPlugin();
 
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
     'high_importance_channel',
@@ -173,13 +200,31 @@ class FCMService {
   static bool _localInitializedInThisIsolate = false;
 
   static Future<void> showBackgroundBanner(RemoteMessage msg) async {
+    debugPrint('🔔 [FCM] showBackgroundBanner: ${msg.messageId}');
     final mediaType = msg.data['mediaType'] as String?;
-    if (mediaType == 'video') return;
+    if (mediaType == 'video') {
+      debugPrint('🔕 [FCM] showBackgroundBanner: video, skipping');
+      return;
+    }
     if (!_localInitializedInThisIsolate) {
+      debugPrint('🔔 [FCM] showBackgroundBanner: initializing local plugin');
       await _initLocal();
       _localInitializedInThisIsolate = true;
     }
-    await _showBanner(msg);
+    try {
+      // fetchAvatar: false — a background isolate gets a tight execution
+      // window from Android before it's killed. The earlier version
+      // awaited a network image download here, which sometimes lost that
+      // race and the notification never got shown at all — this is why it
+      // "sometimes worked" (whenever the avatar happened to already be
+      // cached from an earlier successful call). Using the plain app icon
+      // in the background is a small visual downgrade in exchange for the
+      // notification actually reliably showing up every time.
+      await _showBanner(msg, fetchAvatar: false);
+      debugPrint('✅ [FCM] showBackgroundBanner: shown');
+    } catch (e) {
+      debugPrint('❌ [FCM] showBackgroundBanner FAILED: $e');
+    }
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -325,25 +370,44 @@ class FCMService {
     }
   }
 
-  static Future<void> _showBanner(RemoteMessage msg) async {
-    final n = msg.notification;
-    if (n == null) return;
+  /// Mirrors actionText() in push_server/api/send-notification.js — keep
+  /// in sync. Needed here because message-type pushes are now data-only
+  /// (see send-notification.js), so there's no server-built notification
+  /// body to read for those; for consistency this builds it the same way
+  /// for every type, whether or not a notification block is present.
+  static String _actionText(String? type) {
+    switch (type) {
+      case 'postLike':     return 'reacted to your post';
+      case 'postComment':  return 'commented on your post';
+      case 'commentLike':  return 'liked your comment';
+      case 'commentReply': return 'replied to your comment';
+      case 'follow':       return 'started following you';
+      case 'mention':      return 'mentioned you';
+      case 'blocked':      return 'blocked you';
+      default:              return 'sent you a notification';
+    }
+  }
 
+  static Future<void> _showBanner(RemoteMessage msg, {bool fetchAvatar = true}) async {
     final data      = msg.data;
     final type      = data['type'] as String?;
+    final isMessage = type == 'message';
     final fromName  = (data['fromUserName'] as String?)?.trim().isNotEmpty == true
         ? data['fromUserName'] as String
-        : (n.title ?? 'Vibely');
+        : (msg.notification?.title ?? 'Vibely');
     final fromImage = data['fromUserImage'] as String?;
-    final body      = n.body ?? '';
-    final isMessage = type == 'message';
+    final body = isMessage
+        ? ((data['text'] as String?)?.trim().isNotEmpty == true
+        ? data['text'] as String
+        : 'Sent you a message')
+        : (msg.notification?.body ?? _actionText(type));
 
-    final avatarBytes = await _fetchAvatar(fromImage);
+    final avatarBytes = fetchAvatar ? await _fetchAvatar(fromImage) : null;
     final AndroidBitmap<Object> largeIcon = avatarBytes != null
         ? ByteArrayAndroidBitmap(avatarBytes)
         : const DrawableResourceAndroidBitmap('@mipmap/ic_launcher');
     final personIcon =
-        avatarBytes != null ? ByteArrayAndroidIcon(avatarBytes) : null;
+    avatarBytes != null ? ByteArrayAndroidIcon(avatarBytes) : null;
 
     late final int notifId;
     late final StyleInformation style;
@@ -364,7 +428,7 @@ class FCMService {
       style = MessagingStyleInformation(
         sender,
         groupConversation:
-            (data['isGroup'] as String?) == 'true' || data['isGroup'] == true,
+        (data['isGroup'] as String?) == 'true' || data['isGroup'] == true,
         conversationTitle: fromName,
         messages: history,
       );
@@ -399,22 +463,22 @@ class FCMService {
           visibility: isMessage ? NotificationVisibility.private : null,
           actions: isMessage
               ? <AndroidNotificationAction>[
-                  AndroidNotificationAction(
-                    _actionReply,
-                    'Reply',
-                    showsUserInterface: false,
-                    cancelNotification: false,
-                    inputs: const [
-                      AndroidNotificationActionInput(label: 'Type a message…'),
-                    ],
-                  ),
-                  const AndroidNotificationAction(
-                    _actionMarkSeen,
-                    'Mark as read',
-                    showsUserInterface: false,
-                    cancelNotification: true,
-                  ),
-                ]
+            AndroidNotificationAction(
+              _actionReply,
+              'Reply',
+              showsUserInterface: false,
+              cancelNotification: false,
+              inputs: const [
+                AndroidNotificationActionInput(label: 'Type a message…'),
+              ],
+            ),
+            const AndroidNotificationAction(
+              _actionMarkSeen,
+              'Mark as read',
+              showsUserInterface: false,
+              cancelNotification: true,
+            ),
+          ]
               : null,
         ),
         iOS: const DarwinNotificationDetails(
