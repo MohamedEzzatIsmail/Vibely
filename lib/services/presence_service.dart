@@ -104,6 +104,33 @@ class PresenceService {
     });
   }
 
+  /// Watches another user's live presence directly from Realtime Database —
+  /// the authoritative source. Unlike the Firestore mirror above (which can
+  /// only ever reflect a write made by that user's OWN device while it's
+  /// still running), this works correctly even when that device crashed,
+  /// was force-killed, or lost network — because RTDB's onDisconnect()
+  /// hook fires server-side, with no dependence on any device still being
+  /// alive to relay it anywhere. This is what other people's online dots
+  /// should actually be reading from.
+  StreamSubscription<DatabaseEvent> watchStatus(
+      String uid,
+      void Function(bool isOnline, DateTime? lastSeen) onData,
+      ) {
+    return _rtdb.ref('status/$uid').onValue.listen((event) {
+      final data = event.snapshot.value;
+      if (data == null || data is! Map) {
+        onData(false, null);
+        return;
+      }
+      final isOnline = data['isOnline'] == true;
+      final lastSeenMs = data['lastSeen'];
+      final lastSeen = lastSeenMs is int
+          ? DateTime.fromMillisecondsSinceEpoch(lastSeenMs)
+          : null;
+      onData(isOnline, lastSeen);
+    });
+  }
+
   /// Call this on explicit logout, BEFORE FirebaseAuth.signOut().
   /// Writes isOnline=false immediately and tears down the listeners so the
   /// disconnect hook for the OLD account doesn't fire after a new account

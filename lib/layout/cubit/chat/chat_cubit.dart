@@ -11,6 +11,7 @@ import '../../../models/message_model.dart';
 import '../../../models/notification_model.dart';
 import '../../../models/user_model.dart';
 import '../../../services/repositories/chat_repository.dart';
+import '../../../services/presence_service.dart';
 import '../notifications/notifications_cubit.dart';
 import 'chat_states.dart';
 
@@ -95,6 +96,7 @@ class ChatCubit extends Cubit<ChatStates> {
   // ── Real-time presence ─────────────────────────────────────────────────────
   final Map<String, UserModel>              livePresence  = {};
   final Map<String, StreamSubscription>     _presenceSubs = {};
+  final Map<String, StreamSubscription>     _rtdbPresenceSubs = {};
 
   // ── Group data ─────────────────────────────────────────────────────────────
   List<GroupModel>                                  groups              = [];
@@ -196,6 +198,7 @@ class ChatCubit extends Cubit<ChatStates> {
       ..._messageSubs.values, ..._typingSubs.values,
       ..._lastMsgSubs.values, ..._unreadSubs.values,
       ..._presenceSubs.values, ..._groupMsgSubs.values,
+      ..._rtdbPresenceSubs.values,
     ]) { s.cancel(); }
     _groupsListener?.cancel();
     _cancelAllRetries();
@@ -215,12 +218,36 @@ class ChatCubit extends Cubit<ChatStates> {
     _presenceSubs[uid] = ChatRepository.watchUser(uid, (s) {
       _clearRetry(key);
       if (!s.exists) return;
-      livePresence[uid] = UserModel.fromJson(s.data()!);
+      final incoming = UserModel.fromJson(s.data()!);
+      // isOnline/lastSeen come exclusively from the RTDB overlay below —
+      // this Firestore-mirrored copy of them can go stale forever after a
+      // crash/kill (see PresenceService's doc comment), so don't let it
+      // clobber whatever the authoritative RTDB listener already knows.
+      final existing = livePresence[uid];
+      if (existing != null) {
+        incoming.isOnline = existing.isOnline;
+        incoming.lastSeen = existing.lastSeen;
+      }
+      livePresence[uid] = incoming;
       emit(ChatOnlineUpdatedState());
     }, onError: (e) {
       debugPrint('Presence listener error for $uid: $e');
       _scheduleRetry(key, () => listenPresence(uid));
     });
+
+    // Authoritative online/offline status, read directly from Realtime
+    // Database instead of the Firestore mirror — see PresenceService for
+    // why the mirror alone can't correctly reflect a crash/kill/network
+    // loss on someone else's device.
+    _rtdbPresenceSubs[uid]?.cancel();
+    _rtdbPresenceSubs[uid] =
+        PresenceService.instance.watchStatus(uid, (isOnline, lastSeen) {
+          final u = livePresence[uid] ?? UserModel(uid: uid);
+          u.isOnline = isOnline;
+          u.lastSeen = lastSeen?.toIso8601String();
+          livePresence[uid] = u;
+          emit(ChatOnlineUpdatedState());
+        });
   }
 
   Future<void> setOnline(bool isOnline) async {
