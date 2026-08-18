@@ -676,9 +676,11 @@ class ChatCubit extends Cubit<ChatStates> {
   }
 
   Future<void> markAsSeen(String receiverId) async {
+    final myUid = currentUser?.uid ?? FirebaseAuth.instance.currentUser?.uid;
+    if (myUid == null) return;
     await ChatRepository.markAsSeen(
       chatId: _getChatId(receiverId),
-      myUid: currentUser!.uid!,
+      myUid: myUid,
     );
   }
 
