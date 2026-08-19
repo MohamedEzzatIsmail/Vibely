@@ -209,7 +209,7 @@ class FCMService {
     }
     if (!_localInitializedInThisIsolate) {
       debugPrint('🔔 [FCM] showBackgroundBanner: initializing local plugin');
-      await _initLocal();
+      await _initLocalForBackgroundShowOnly();
       _localInitializedInThisIsolate = true;
     }
     try {
@@ -291,6 +291,32 @@ class FCMService {
         if (r.payload != null) _onLocalTap(r.payload!);
       },
       onDidReceiveBackgroundNotificationResponse: notificationBackgroundHandler,
+    );
+  }
+
+  /// Used only from [showBackgroundBanner] — enough setup for `.show()` to
+  /// work, but deliberately does NOT re-register
+  /// onDidReceiveNotificationResponse / onDidReceiveBackgroundNotification-
+  /// Response. Those must only ever be registered once, from the app's
+  /// real startup in [init] below — the plugin persists that registration
+  /// natively so a separate background isolate can dispatch to it later
+  /// when a notification action is tapped. Re-registering it here, from
+  /// this throwaway isolate that gets torn down right after showing the
+  /// banner, risks overwriting that persisted link with one tied to an
+  /// isolate that's already gone — which silently breaks action handling:
+  /// Android waits forever for a response dispatcher that no longer
+  /// resolves to anything, which looks exactly like a stuck "sending..."
+  /// spinner on the Reply action.
+  static Future<void> _initLocalForBackgroundShowOnly() async {
+    await _local.initialize(
+      settings: const InitializationSettings(
+        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        iOS: DarwinInitializationSettings(
+          requestAlertPermission: false,
+          requestBadgePermission: false,
+          requestSoundPermission: false,
+        ),
+      ),
     );
   }
 
