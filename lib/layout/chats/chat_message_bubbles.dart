@@ -83,7 +83,13 @@ class _OtherBubble extends StatelessWidget {
                   maxWidth: MediaQuery.of(context).size.width * 0.72),
               decoration: BoxDecoration(
                 gradient: msg.isDeleted ? null : const LinearGradient(
-                    colors: [Color(0xFFFFFFFF), Color(0xFFE8E8E8)],
+                  // True mid-tone metallic silver (around the standard
+                  // #C0C0C0 "silver" reference) with a bright shine
+                  // streak and a deeper shadow edge — was pure white
+                  // (#FFFFFF -> #E8E8E8) before, which is why white
+                  // icons/text on it were invisible.
+                    colors: [Color(0xFFA8A8B2), Color(0xFFEDEDF1), Color(0xFF8A8A94)],
+                    stops: [0.0, 0.5, 1.0],
                     begin: Alignment.topLeft, end: Alignment.bottomRight),
                 color: msg.isDeleted ? const Color(0xFF1C2128) : null,
                 borderRadius: const BorderRadius.only(

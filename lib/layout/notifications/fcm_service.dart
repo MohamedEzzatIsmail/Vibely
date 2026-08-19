@@ -97,6 +97,7 @@ Future<void> notificationBackgroundHandler(NotificationResponse response) async 
       debugPrint('❌ [FCM] action: no signed-in user in this isolate');
       return;
     }
+    debugPrint('🔎 [FCM] action: myUid=$myUid otherUid=$otherUid chatId=$chatId');
 
     if (response.actionId == _actionMarkSeen) {
       debugPrint('👁️ [FCM] action: marking seen for $chatId');
