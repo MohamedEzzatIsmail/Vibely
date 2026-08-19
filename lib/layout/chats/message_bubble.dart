@@ -82,7 +82,7 @@ class MessageBubble extends StatelessWidget {
           children: [
             Column(
               crossAxisAlignment:
-                  isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
                 // ── Reply preview ──────────────────────────────────────────
                 if (msg.hasReply)
@@ -128,7 +128,7 @@ class MessageBubble extends StatelessWidget {
                   ),
                   child: isSelected
                       ? const Icon(Icons.check_rounded,
-                          color: Colors.black87, size: 12)
+                      color: Colors.black87, size: 12)
                       : null,
                 ),
               ),
@@ -163,32 +163,45 @@ class _BubbleContainer extends StatelessWidget {
         gradient: (isDeleted || deletedByOther)
             ? null
             : isMe
-                ? LinearGradient(
-                    colors: [
-                      kGold.withValues(alpha: 0.85),
-                      const Color(0xFFB8964A),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  )
-                : LinearGradient(
-                    // Dark mode: dark grey. Light mode: visible silver-grey (not white).
-                    colors: AppColors.of(context).isDark
-                        ? const [Color(0xFF2C313A), Color(0xFF21262D)]
-                        : const [Color(0xFFD8D8DC), Color(0xFFCCCCD0)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+            ? LinearGradient(
+          colors: [
+            kGold.withValues(alpha: 0.85),
+            const Color(0xFFB8964A),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        )
+            : LinearGradient(
+          // A real metallic sheen — light silver -> bright
+          // highlight streak -> deeper silver shadow — not just
+          // a flat two-tone grey. Dark mode gets the same
+          // highlight-streak treatment, just kept low enough to
+          // still read as "dark" rather than washed out.
+          colors: AppColors.of(context).isDark
+              ? const [
+            Color(0xFF2C313A),
+            Color(0xFF3B414D),
+            Color(0xFF21262D),
+          ]
+              : const [
+            Color(0xFFE4E4E9),
+            Color(0xFFFAFAFC),
+            Color(0xFFC6C6CC),
+          ],
+          stops: const [0.0, 0.45, 1.0],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         color: (isDeleted || deletedByOther) ? Colors.transparent : null,
         border: (isDeleted || deletedByOther)
             ? Border.all(color: Colors.white12, width: 0.5)
             : isMe
-                ? Border.all(color: kGold.withValues(alpha: 0.35), width: 0.5)
-                : Border.all(
-                    color: AppColors.of(context).isDark
-                        ? Colors.white.withValues(alpha: 0.05)
-                        : const Color(0xFFBBBBBF),
-                    width: 0.5),
+            ? Border.all(color: kGold.withValues(alpha: 0.35), width: 0.5)
+            : Border.all(
+            color: AppColors.of(context).isDark
+                ? Colors.white.withValues(alpha: 0.05)
+                : const Color(0xFFBBBBBF),
+            width: 0.5),
         borderRadius: BorderRadius.only(
           topLeft:     const Radius.circular(18),
           topRight:    const Radius.circular(18),
@@ -198,14 +211,14 @@ class _BubbleContainer extends StatelessWidget {
         boxShadow: (isDeleted || deletedByOther)
             ? null
             : [
-                BoxShadow(
-                  color: isMe
-                      ? kGold.withValues(alpha: 0.12)
-                      : Colors.black.withValues(alpha: 0.2),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+          BoxShadow(
+            color: isMe
+                ? kGold.withValues(alpha: 0.12)
+                : Colors.black.withValues(alpha: 0.2),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Stack(
         children: [
@@ -271,7 +284,7 @@ class _BubbleBody extends StatelessWidget {
 
     return Column(
       crossAxisAlignment:
-          isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
       children: [
 
         // ── Forwarded label ─────────────────────────────────────────────────
@@ -411,9 +424,16 @@ class _VoiceRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final trackColor = isMe ? Colors.black26 : Colors.white12;
-    final iconColor  = isMe ? Colors.black54 : Colors.white54;
-    final metaColor  = isMe ? Colors.black38 : Colors.white38;
+    final isDark = AppColors.of(context).isDark;
+    final trackColor = isMe
+        ? Colors.black26
+        : (isDark ? Colors.white12 : const Color(0x331A1A1A));
+    final iconColor = isMe
+        ? Colors.black54
+        : (isDark ? Colors.white54 : const Color(0xFF1A1A1A));
+    final metaColor = isMe
+        ? Colors.black38
+        : (isDark ? Colors.white38 : const Color(0xFF3A3A3A));
 
     return Row(mainAxisSize: MainAxisSize.min, children: [
       Icon(Icons.mic_rounded, color: iconColor, size: 18),
@@ -421,7 +441,7 @@ class _VoiceRow extends StatelessWidget {
       Container(
         width: 100, height: 3,
         decoration: BoxDecoration(
-          color: trackColor, borderRadius: BorderRadius.circular(2)),
+            color: trackColor, borderRadius: BorderRadius.circular(2)),
       ),
       const SizedBox(width: 8),
       Text(_fmt(durationSec), style: TextStyle(fontSize: 11, color: metaColor)),

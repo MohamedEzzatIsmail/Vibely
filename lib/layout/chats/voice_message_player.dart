@@ -6,6 +6,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 
+import '../../share/style/app_colors.dart';
+
 const _kGoldPlayed   = Color(0xFFE5C687);
 const _kGoldUnplayed = Color(0x50E5C687);
 const _kBluePlayed   = Color(0xFF1976D2);
@@ -213,9 +215,16 @@ class _VoiceMessagePlayerState extends State<VoiceMessagePlayer> {
   Widget build(BuildContext context) {
     final totalShow = _total.inSeconds > 0
         ? _total : Duration(seconds: widget.durationSec);
-    final metaColor = widget.isMe ? Colors.black45 : Colors.white54;
-    final dimColor  = widget.isMe ? Colors.black12 : Colors.white12;
-    final iconColor = widget.isMe ? Colors.black87 : Colors.white70;
+    final isDark = AppColors.of(context).isDark;
+    final metaColor = widget.isMe
+        ? Colors.black45
+        : (isDark ? Colors.white54 : const Color(0xFF3A3A3A));
+    final dimColor = widget.isMe
+        ? Colors.black12
+        : (isDark ? Colors.white12 : const Color(0x1A1A1A1A));
+    final iconColor = widget.isMe
+        ? Colors.black87
+        : (isDark ? Colors.white70 : const Color(0xFF1A1A1A));
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
@@ -264,11 +273,11 @@ class _VoiceMessagePlayerState extends State<VoiceMessagePlayer> {
                 child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                  Text(_fmt(_pos),
-                      style: TextStyle(fontSize: 10, color: metaColor)),
-                  Text(_fmt(totalShow),
-                      style: TextStyle(fontSize: 10, color: metaColor)),
-                ]),
+                      Text(_fmt(_pos),
+                          style: TextStyle(fontSize: 10, color: metaColor)),
+                      Text(_fmt(totalShow),
+                          style: TextStyle(fontSize: 10, color: metaColor)),
+                    ]),
               ),
             ],
           ),
