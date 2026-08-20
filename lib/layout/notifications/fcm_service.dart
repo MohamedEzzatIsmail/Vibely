@@ -9,12 +9,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 
-import '../../models/message_model.dart';
 import '../../models/notification_model.dart';
 import '../../services/repositories/chat_repository.dart';
 import '../../share/network/notification_router.dart';
 
-const String _actionReply = 'reply';
 const String _actionMarkSeen = 'mark_seen';
 
 /// Marks the message this push refers to as 'delivered' — called from both
@@ -61,6 +59,13 @@ Future<void> notificationBackgroundHandler(NotificationResponse response) async 
     debugPrint('🔕 [FCM] action: not an action tap, ignoring');
     return;
   }
+  // Reply no longer sends silently in the background — see the action
+  // definition in _showBanner below for why. It's now a plain "open app"
+  // action, which goes through the normal notification-tap routing
+  // (_route/_onLocalTap/handleTerminatedMessage), not this handler. This
+  // handler now only deals with Mark as read.
+  if (response.actionId != _actionMarkSeen) return;
+
   final payload = response.payload;
   if (payload == null) {
     debugPrint('❌ [FCM] action: no payload attached');
@@ -80,13 +85,8 @@ Future<void> notificationBackgroundHandler(NotificationResponse response) async 
   }
 
   final chatId = data['chatId'] as String?;
-  final otherUid = data['fromUserId'] as String?;
   if (chatId == null || chatId.isEmpty) {
     debugPrint('❌ [FCM] action: missing chatId in payload');
-    return;
-  }
-  if (otherUid == null || otherUid.isEmpty) {
-    debugPrint('❌ [FCM] action: missing fromUserId in payload');
     return;
   }
 
@@ -97,38 +97,10 @@ Future<void> notificationBackgroundHandler(NotificationResponse response) async 
       debugPrint('❌ [FCM] action: no signed-in user in this isolate');
       return;
     }
-    debugPrint('🔎 [FCM] action: myUid=$myUid otherUid=$otherUid chatId=$chatId');
+    debugPrint('👁️ [FCM] action: marking seen for $chatId');
+    await ChatRepository.markAsSeen(chatId: chatId, myUid: myUid);
+    debugPrint('✅ [FCM] action: marked seen');
 
-    if (response.actionId == _actionMarkSeen) {
-      debugPrint('👁️ [FCM] action: marking seen for $chatId');
-      await ChatRepository.markAsSeen(chatId: chatId, myUid: myUid);
-      debugPrint('✅ [FCM] action: marked seen');
-    } else if (response.actionId == _actionReply) {
-      final replyText = response.input?.trim();
-      if (replyText == null || replyText.isEmpty) {
-        debugPrint('❌ [FCM] action: reply text was empty');
-        return;
-      }
-      debugPrint('✉️ [FCM] action: sending reply "$replyText" to $chatId');
-      final nowStr = DateTime.now().toIso8601String();
-      final msg = MessageModel(
-        senderId: myUid,
-        receiverId: otherUid,
-        text: replyText,
-        dateTime: nowStr,
-        seen: false,
-      );
-      await ChatRepository.sendMessage(
-        chatId: chatId,
-        messageData: msg.toMap(),
-        participants: [myUid, otherUid]..sort(),
-        preview: replyText,
-        lastSenderId: myUid,
-      );
-      debugPrint('✅ [FCM] action: reply sent successfully');
-    }
-    // Either action means this conversation notification has been dealt
-    // with — clear it and its local history for a clean slate next time.
     FCMService.clearChatHistory(chatId);
     await FlutterLocalNotificationsPlugin().cancel(id: chatId.hashCode);
   } catch (e) {
@@ -490,15 +462,6 @@ class FCMService {
           visibility: isMessage ? NotificationVisibility.private : null,
           actions: isMessage
               ? <AndroidNotificationAction>[
-            AndroidNotificationAction(
-              _actionReply,
-              'Reply',
-              showsUserInterface: false,
-              cancelNotification: false,
-              inputs: const [
-                AndroidNotificationActionInput(label: 'Type a message…'),
-              ],
-            ),
             const AndroidNotificationAction(
               _actionMarkSeen,
               'Mark as read',
